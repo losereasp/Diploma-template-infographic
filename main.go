@@ -7,6 +7,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"log"
 	"mime"
@@ -191,13 +194,50 @@ func adminPageHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func saveFile(file multipart.File, filename string) error {
+	// 1. Пробуем декодировать файл как изображение
+	tmpFile, err := os.CreateTemp("", "upload-*.img")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+	if _, err := io.Copy(tmpFile, file); err != nil {
+		return err
+	}
+
+	// Пробуем открыть как PNG
+	tmpFile.Seek(0, 0)
+	img, format, err := image.Decode(tmpFile)
+	if err != nil {
+		// Fallback: пробуем как JPEG
+		tmpFile.Seek(0, 0)
+		img, err = jpeg.Decode(tmpFile)
+		format = "jpeg"
+		if err != nil {
+			// Не удалось декодировать вообще, просто сохранить байты как есть
+			tmpFile.Seek(0, 0)
+			out, err := os.Create(filename)
+			if err != nil {
+				return err
+			}
+			defer out.Close()
+			_, err = io.Copy(out, tmpFile)
+			return err
+		}
+	}
+
+	// Сохраняем именно как PNG (кодируем всегда как png)
 	out, err := os.Create(filename)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
-	_, err = io.Copy(out, file)
-	return err
+	err = png.Encode(out, img)
+	if err != nil {
+		return err
+	}
+	log.Printf("Saved %s as PNG (source format: %s)", filename, format)
+	return nil
 }
 
 func saveTaskHandler(w http.ResponseWriter, r *http.Request) {
@@ -222,10 +262,8 @@ func saveTaskHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	taskType := r.FormValue("type")     // "thesis", "quote", "intro" и т.д.
-	template := r.FormValue("template") // id шаблона
-
-	// Получаем параметры задачи в JSON (универсально)
+	taskType := r.FormValue("type")
+	template := r.FormValue("template")
 	paramsRaw := r.FormValue("params")
 	var params map[string]interface{}
 	if err := json.Unmarshal([]byte(paramsRaw), &params); err != nil {
@@ -236,15 +274,12 @@ func saveTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	// --- Файлы (только для тезисов, если нужно) ---
 	if taskType == "thesis" {
-		// Обработка файлов, как было (можно вынести в отдельную функцию, но пока оставим так)
 		audioPath := filepath.Join("C:/Users/Yarik/Downloads/DIPLOMA/input", "audio.mp3")
 		if audioFile, _, err := r.FormFile("audio"); err == nil {
 			defer audioFile.Close()
 			saveFile(audioFile, audioPath)
 			params["audioPath"] = audioPath
 		}
-
-		// Картинки для тезисов (если нужны)
 		if thesesRaw, ok := params["theses"].([]interface{}); ok {
 			for i := 1; i <= len(thesesRaw); i++ {
 				fieldName := fmt.Sprintf("thesis_img_%d", i)
@@ -255,33 +290,40 @@ func saveTaskHandler(w http.ResponseWriter, r *http.Request) {
 					imgPath = filepath.Join("C:/Users/Yarik/Downloads/DIPLOMA/input", fmt.Sprintf("image_%d.png", i))
 					saveFile(file, imgPath)
 				}
-				params[fmt.Sprintf("imagePath_%d", i)] = imgPath // даже если пусто
+				params[fmt.Sprintf("imagePath_%d", i)] = imgPath
 			}
 		}
 	}
 
+	// --- Формируем уникальный outputPath (теперь просто через timestamp или params, без uid) ---
+	base := "C:/Users/Yarik/Downloads/DIPLOMA"
+	outputPath := filepath.Join(base, "output", fmt.Sprintf("%s_%d.mp4", template, time.Now().UnixNano()))
+	params["output_path"] = outputPath
+
 	// --- Собираем Nexrender job ---
-	job, err := buildJob(taskType, template, params, username)
+	job, err := buildJob(taskType, template, outputPath, params, username)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"error": "Ошибка сборки job: " + err.Error()})
 		return
 	}
-	uid, err := createNexrenderJob(job)
+
+	log.Printf("ASSETS in job: %+v", job["assets"])
+	nexrenderUid, err := createNexrenderJob(job)
 	if err != nil {
 		writeJsonError(w, "Ошибка отправки задачи в nexrender-server: "+err.Error(), 500)
 		log.Println("Ошибка отправки задачи в nexrender-server:", err)
 		return
 	}
 
-	saveRenderHistory(username, uid, taskType, params, "queued")
-	log.Println("Задача отправлена в nexrender-server, UID:", uid)
+	saveRenderHistory(username, nexrenderUid, taskType, params, "queued")
+	log.Println("Задача отправлена в nexrender-server, UID:", nexrenderUid)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "render_started", "uid": uid})
+	json.NewEncoder(w).Encode(map[string]string{"status": "render_started", "uid": nexrenderUid})
 }
 
-func buildJob(taskType, template string, params map[string]interface{}, username string) (map[string]interface{}, error) {
+func buildJob(taskType, template, outputPath string, params map[string]interface{}, username string) (map[string]interface{}, error) {
 	base := "C:/Users/Yarik/Downloads/DIPLOMA"
 	aepPath, err := getAepPathById(template)
 	if err != nil || aepPath == "" {
@@ -291,14 +333,11 @@ func buildJob(taskType, template string, params map[string]interface{}, username
 
 	var assets []map[string]interface{}
 	var composition string
-	var outputPath string
 
 	switch taskType {
 	case "thesis":
 		composition = getCompositionName(template)
-		outputPath = filepath.Join(base, "output", template+"_rendered.mp4")
 		audioPath, _ := params["audioPath"].(string)
-
 		assets = append(assets, map[string]interface{}{
 			"composition": "IZ_TEZIS",
 			"layerName":   "audio",
@@ -306,7 +345,6 @@ func buildJob(taskType, template string, params map[string]interface{}, username
 			"type":        "audio",
 		})
 
-		// Тексты и картинки
 		theses, _ := params["theses"].([]interface{})
 		for i, tRaw := range theses {
 			t, _ := tRaw.(map[string]interface{})
@@ -326,8 +364,6 @@ func buildJob(taskType, template string, params map[string]interface{}, username
 					"property":    "Source Text",
 					"value":       t["title"],
 				})
-
-			// Картинка для тезиса (если есть)
 			if img, ok := params[fmt.Sprintf("imagePath_%d", i+1)].(string); ok && img != "" {
 				assets = append(assets, map[string]interface{}{
 					"composition": fmt.Sprintf("IZ_TEZIS->Tezis_Image_%d->IMAGE_%d", i+1, i+1),
@@ -337,12 +373,8 @@ func buildJob(taskType, template string, params map[string]interface{}, username
 				})
 			}
 		}
-
-	// --- Добавляем новые шаблоны тут ---
 	case "quote":
-		// пример
 		composition = "QUOTE_MAIN"
-		outputPath = filepath.Join(base, "output", template+"_rendered.mp4")
 		quoteText := params["quote"].(string)
 		author := params["author"].(string)
 		assets = append(assets,
@@ -360,8 +392,6 @@ func buildJob(taskType, template string, params map[string]interface{}, username
 				"property":    "Source Text",
 				"value":       author,
 			})
-	// -- дальше расширяем под нужные типы --
-
 	default:
 		return nil, fmt.Errorf("Неизвестный тип задачи")
 	}
@@ -428,6 +458,10 @@ func getNexrenderJobStatus(uid string) (map[string]interface{}, error) {
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
+	if len(body) == 0 {
+		return nil, fmt.Errorf("empty response from nexrender")
+	}
+
 	var data map[string]interface{}
 	if err := json.Unmarshal(body, &data); err != nil {
 		return nil, err
@@ -603,7 +637,7 @@ func updateRenderHistoryStatus(uid, newStatus, outputPath string) error {
 func startStatusUpdater() {
 	go func() {
 		for {
-			time.Sleep(10 * time.Second) // Опрос раз в 10 секунд, можно чаще/реже
+			time.Sleep(10 * time.Second)
 
 			db, err := sql.Open("sqlite3", "./templates.db")
 			if err != nil {
@@ -611,7 +645,6 @@ func startStatusUpdater() {
 				continue
 			}
 
-			// Ищем только неготовые задачи
 			rows, err := db.Query("SELECT uid, status FROM render_history WHERE status IN ('queued', 'rendering')")
 			if err != nil {
 				db.Close()
@@ -630,28 +663,86 @@ func startStatusUpdater() {
 
 			for _, uid := range uids {
 				statusObj, err := getNexrenderJobStatus(uid)
-				if err != nil {
-					log.Println("StatusUpdater: nexrender error:", err)
-					continue
-				}
-				// Пример структуры ответа Nexrender (проверь у себя, если надо!)
-				status, _ := statusObj["state"].(string)
+				var myStatus string
 				var outputPath string
-				if out, ok := statusObj["output"].(string); ok {
-					outputPath = out
+				var progress float64
+
+				if err != nil || statusObj == nil {
+					// Проверяем, сколько времени прошло с момента создания задачи
+					dbCheck, _ := sql.Open("sqlite3", "./templates.db")
+					var submittedAt string
+					_ = dbCheck.QueryRow("SELECT submitted_at FROM render_history WHERE uid = ?", uid).Scan(&submittedAt)
+					dbCheck.Close()
+
+					t, errParse := time.Parse(time.RFC3339, submittedAt)
+					if errParse != nil {
+						t, errParse = time.Parse("2006-01-02 15:04:05", submittedAt)
+						if errParse != nil {
+							t, _ = time.Parse("2006-01-02 15:04", submittedAt)
+						}
+					}
+					if !t.IsZero() && time.Since(t) < 90*time.Second {
+						log.Printf("StatusUpdater: %s нет в nexrender, задача свежая (%s), ждём...\n", uid, submittedAt)
+						continue
+					}
+
+					// Проверяем, вдруг output-файл уже готов
+					dbFile, _ := sql.Open("sqlite3", "./templates.db")
+					var paramsStr string
+					_ = dbFile.QueryRow("SELECT params FROM render_history WHERE uid = ?", uid).Scan(&paramsStr)
+					dbFile.Close()
+					var params map[string]interface{}
+					_ = json.Unmarshal([]byte(paramsStr), &params)
+					opath, _ := params["output_path"].(string)
+					fi, errStat := os.Stat(opath)
+					if errStat == nil && fi.Size() > 1024*1024 {
+						myStatus = "done"
+						outputPath = opath
+						log.Printf("StatusUpdater: file найден для %s, ставим done\n", uid)
+						progress = 1.0
+					} else {
+						myStatus = "error"
+						outputPath = opath
+						log.Printf("StatusUpdater: nexrender error/empty для %s, ставим error\n", uid)
+						progress = 0.0
+					}
+				} else {
+					status, _ := statusObj["state"].(string)
+					if out, ok := statusObj["output"].(string); ok {
+						outputPath = out
+					}
+					if pr, ok := statusObj["progress"].(float64); ok {
+						progress = pr
+					} else if prInt, ok := statusObj["progress"].(int); ok {
+						progress = float64(prInt)
+					}
+					switch status {
+					case "queued":
+						myStatus = "queued"
+					case "running":
+						myStatus = "rendering"
+					case "finished":
+						myStatus = "done"
+						progress = 1.0
+					case "errored", "failed", "canceled":
+						myStatus = "error"
+						progress = 0.0
+					default:
+						myStatus = "unknown"
+					}
 				}
-				// Маппим Nexrender-статусы на свои
-				myStatus := "queued"
-				switch status {
-				case "queued":
-					myStatus = "queued"
-				case "running":
-					myStatus = "rendering"
-				case "finished":
-					myStatus = "done"
-				case "errored", "failed", "canceled":
-					myStatus = "error"
-				}
+
+				// Сохраняем прогресс в params (JSON)
+				dbp, _ := sql.Open("sqlite3", "./templates.db")
+				var paramsStr string
+				_ = dbp.QueryRow("SELECT params FROM render_history WHERE uid = ?", uid).Scan(&paramsStr)
+				var params map[string]interface{}
+				_ = json.Unmarshal([]byte(paramsStr), &params)
+				params["progress"] = progress
+				paramsJSON, _ := json.Marshal(params)
+				_, _ = dbp.Exec(`UPDATE render_history SET params = ? WHERE uid = ?`, string(paramsJSON), uid)
+				dbp.Close()
+
 				updateRenderHistoryStatus(uid, myStatus, outputPath)
 			}
 		}

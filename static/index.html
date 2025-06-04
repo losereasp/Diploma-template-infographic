@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ru" data-bs-theme="auto">
+  <head>
+    <meta charset="utf-8">
+    <title>lsrsp</title>
+
+    <!-- --- Сторонние библиотеки --- -->
+    <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.1/dist/cropper.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    <script defer src="assets/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/color-modes.js"></script>
+
+    <!-- --- Твои js-модули --- -->
+    <script src="assets/js/auth.js"></script>
+    <script src="assets/js/thesis.js"></script>
+    <script src="assets/js/index.js"></script>
+    
+    <!-- --- CSS --- -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.1/dist/cropper.min.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
+    <link rel="canonical" href="https://getbootstrap.com/docs/5.3/examples/album/">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@docsearch/css@3">
+    <link href="assets/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/custom.css">
+  </head>
+  <body>
+    <header style="background-color: #2f496f;" data-bs-theme="dark">
+      <div class="navbar navbar-dark shadow-sm" style="background-color: #2f496f;">
+        <div class="container d-flex justify-content-between align-items-center">
+          <a href="#" class="navbar-brand d-flex align-items-center">
+            <strong style="color: #fff;">Элементы инфографики</strong>
+          </a>
+          <span id="userStatus" class="me-2"></span>
+          <button id="loginBtn" class="btn btn-outline-light btn-sm ms-2">Войти</button>
+          <a href="history.html" id="renderHistoryBtn" class="btn btn-outline-light btn-sm ms-2">История рендеров</a>
+          <a href="protected/admin.html" class="btn btn-outline-light btn-sm ms-2" id="adminPanelBtn" style="display:none;">Админ-панель</a>
+        </div>
+      </div>
+    </header>
+    
+    <!-- Модальное окно для входа -->
+     <div id="loginModal">
+      <div class="login-box">
+        <h5 style="margin-bottom:16px;">Вход</h5>
+        <form id="login-form" autocomplete="off">
+          <input id="loginUsername" class="form-control mb-2" placeholder="Логин" autocomplete="username">
+          <div class="input-group mb-2">
+  <input id="loginPassword" type="password" class="form-control" placeholder="Пароль" autocomplete="current-password">
+  <button class="btn btn-outline-secondary" type="button" id="togglePassword" tabindex="-1">
+    <svg id="eyeIcon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  </button>
+</div>
+
+          <div id="loginError" style="color:#e56e6e;font-size:0.92rem;margin-bottom:8px;"></div>
+          <button id="doLogin" class="btn btn-primary w-100 mb-2" type="submit">Войти</button>
+          <button id="closeLogin" type="button" class="btn btn-outline-secondary w-100">Отмена</button>
+        </form>
+      </div>
+    </div>
+
+    <main>
+      <div class="container py-5">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3" id="template-controls">
+          <input type="text" class="form-control" placeholder="Поиск шаблона..." id="searchInput" />
+          <select class="form-select w-auto" id="categoryFilter">
+            <option value="all">Все категории</option>
+          </select>
+        </div>
+        <div id="template-container"></div>
+      </div>
+    </main>
+
+<footer class="text-body-secondary py-5" style="margin-bottom: 0;">
+  <div class="container">
+    <p class="mb-0 text-center">© lsrsp 2025 | Инфографика автоматизации</p>
+  </div>
+</footer>
+
+<button id="scrollToTopBtn" title="Вверх"
+  style="
+    display: none;
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    z-index: 1201;
+    background: #232329;
+    border: 2px solid #8146B0;
+    color: #fff;
+    border-radius: 50%;
+    width: 52px;
+    height: 52px;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 2px 16px 0 rgba(0,0,0,0.20);
+    transition: opacity 0.2s;
+  ">
+  <svg data-lucide="arrow-up" width="28" height="28"></svg>
+</button>
+
+<!-- Модальное окно редактирования тезисов -->
+<div id="thesisModal" style="display:none; position:fixed; z-index:3000; top:0; left:0; width:100vw; height:100vh; background:rgba(24,28,36,0.92); align-items:center; justify-content:center;">
+  <div class="modal-content p-0">
+    <div class="thesis-modal-header">
+      <h5 class="mb-0" style="font-weight:600;">Тезисы</h5>
+      <button id="closeThesisModal">×</button>
+    </div>
+    <div class="thesis-modal-scroll">
+      <form id="thesis-form">
+        <div class="mb-3">
+          <label for="thesis-count" class="form-label">
+            Количество тезисов: <span id="thesis-count-value" style="font-weight:600;">1</span>
+          </label>
+          <input type="range" id="thesis-count" class="form-range" min="1" max="8" value="1" step="1">
+        </div>
+        <div id="thesis-container" class="mb-4">
+          <!-- Динамически генерируемые поля: заголовок, текст, фото для каждого тезиса -->
+        </div>
+        <!-- ----------- УДАЛЁН ЛИШНИЙ общий блок загрузки фото ----------- -->
+
+        <!-- --- Оставляем только общий загрузчик аудио --- -->
+        <div class="mb-3">
+          <label for="upload-audio" class="form-label">Загрузите аудио:</label>
+          <input type="file" id="upload-audio" class="form-control" accept="audio/*">
+          <audio id="audio-preview" class="mt-2 w-100 d-none" controls></audio>
+        </div>
+        <button type="button" class="btn btn-bd-primary w-100 mt-2" id="save-thesis">Сохранить и рендерить</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div id="cropModal" style="display:none; position:fixed; z-index:5000; top:0; left:0; width:100vw; height:100vh; background:rgba(24,28,36,0.94); align-items:center; justify-content:center;">
+  <div style="background:#222; border-radius:18px; padding:32px 24px; box-shadow:0 6px 38px 0 rgba(0,0,0,0.35); max-width:90vw;">
+    <div style="text-align:right;">
+      <button id="closeCropModal" style="background:none; border:none; color:#fff; font-size:1.9rem; line-height:1; cursor:pointer;">×</button>
+    </div>
+    <img id="cropper-image" style="max-width:75vw; max-height:60vh; background:#333; border-radius:14px;">
+    <div style="text-align:center;margin-top:16px;">
+      <button id="applyCropBtn" class="btn btn-bd-primary">Сохранить обрезку</button>
+    </div>
+  </div>
+</div>
+
+  </body>
+  <!-- Кнопка поиска (справа сверху) -->
+<button id="searchToggleBtn" title="Поиск" style="display:none; position:fixed; top:24px; right:32px; z-index:1201; background:#232329; border:2px solid #8146B0; color:#fff; border-radius:50px; width:52px; height:52px; align-items:center; justify-content:center; cursor:pointer;">
+  <svg data-lucide="search" width="28" height="28"></svg>
+</button>
+
+<!-- Модальное окно поиска -->
+<div id="searchModal" style="display:none;">
+  <div class="search-modal-backdrop"></div>
+  <div class="search-modal-content">
+    <div class="mb-3">
+      <input type="text" class="form-control" id="searchInputModal" placeholder="Поиск шаблона...">
+    </div>
+    <div class="mb-3">
+      <select class="form-select w-auto" id="categoryFilterModal">
+        <option value="all">Все категории</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+</html>

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ru" data-bs-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <title>История рендеров | lsrsp</title>
+  <!-- Bootstrap -->
+  <link href="assets/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Твои кастомные стили -->
+  <link rel="stylesheet" href="assets/css/custom.css">
+  <style>
+    body { background: #232329; color: #fff; }
+    .history-table pre {
+      background: #181c24;
+      color: #9ee2f6;
+      border-radius: 10px;
+      padding: 10px 16px;
+      margin: 0;
+      font-size: 0.96em;
+      box-shadow: 0 2px 16px 0 rgba(0,0,0,0.07);
+      max-width: 640px;
+      overflow-x: auto;
+    }
+    .table-dark { --bs-table-bg: #20242b; --bs-table-striped-bg: #232329; }
+    .table thead th { border-bottom: 2px solid #444; }
+    .history-table td, .history-table th { vertical-align: top; }
+    main.container { max-width: 1200px; }
+    @media (max-width: 1000px) {
+      .history-table { font-size: 0.92em; }
+      main.container { max-width: 99vw; }
+    }
+  </style>
+</head>
+<body>
+  <header style="background-color: #2f496f;">
+    <div class="navbar navbar-dark shadow-sm">
+      <div class="container d-flex justify-content-between align-items-center">
+        <a href="index.html" class="navbar-brand d-flex align-items-center">
+          <strong style="color: #fff;">Элементы инфографики</strong>
+        </a>
+        <span id="userStatus" class="me-2"></span>
+        <a href="index.html" class="btn btn-outline-light btn-sm ms-2">На главную</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container py-5">
+    <h2 class="mb-4">История рендеров</h2>
+    <div id="renderHistoryContent" class="table-responsive">
+      <table id="renderHistoryTable" class="table table-dark table-striped align-middle history-table">
+        <thead>
+            <tr>
+                <th>Дата</th>
+                <th>Шаблон</th>
+                <th>Тип</th>
+                <th>Параметры</th>
+                <th>UID</th>
+                <th>Статус</th>
+                <th>Пользователь</th>
+            </tr>
+        </thead>
+        <tbody>
+          <!-- JS будет сюда вставлять строки -->
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- Скрипты -->
+  <script src="assets/js/auth.js"></script>
+  <script src="assets/js/history.js"></script>
+  <script>
+    window.auth && window.auth.init && window.auth.init();
+  </script>
+</body>
+</html>

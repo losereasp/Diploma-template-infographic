@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ru" data-bs-theme="auto">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Редактирование тезисов</title>
+
+  <link href="assets/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/dist/css/custom.css">
+  <script src="assets/dist/js/bootstrap.bundle.min.js" defer></script>
+  <script src="assets/js/color-modes.js" defer></script>
+
+  <style>
+    body {
+      background-color: #181c24;
+      color: #e4e8f0;
+      font-family: 'Roboto', Arial, sans-serif;
+    }
+    .card {
+      background: #20242b;
+      border-radius: 16px;
+      border: none;
+      box-shadow: 0 4px 20px 0 rgba(0,0,0,0.12);
+    }
+    .btn-bd-primary {
+      background-color: #365fa0 !important;
+      border-color: #365fa0 !important;
+      color: #fff;
+      transition: background 0.18s;
+    }
+    .btn-bd-primary:hover, .btn-bd-primary:focus {
+      background: #22406b !important;
+    }
+    .preview-image {
+      max-width: 100%;
+      margin-top: 10px;
+      border-radius: 8px;
+      background: #16181f;
+      padding: 4px;
+    }
+    .form-label {
+      color: #bfd7f7;
+      margin-bottom: 0.25rem;
+    }
+    .thesis-block {
+      background: #232933;
+      border-radius: 10px;
+      padding: 18px 14px 12px 14px;
+      margin-bottom: 15px;
+      box-shadow: 0 1px 8px 0 rgba(0,0,0,0.05);
+    }
+    .thesis-block label {
+      color: #e6eaf0;
+    }
+    .form-control, .form-select {
+      background: #232933;
+      color: #fff;
+      border: 1.2px solid #365fa0;
+      border-radius: 8px;
+      transition: border-color 0.14s;
+    }
+    .form-control:focus, .form-select:focus {
+      border-color: #22406b;
+      background: #232933;
+      color: #fff;
+      box-shadow: 0 0 0 0.14rem #22406b55;
+    }
+    .navbar, .navbar-brand, .btn {
+      font-size: 1.08rem;
+    }
+    @media (max-width: 600px) {
+      .card, .thesis-block { padding: 12px 6px; }
+    }
+    ::selection {
+      background: #22406b;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <header style="background-color: #24344d;" data-bs-theme="dark">
+    <div class="navbar navbar-dark shadow-sm" style="background-color: #24344d;">
+      <div class="container d-flex justify-content-between align-items-center">
+        <a href="#" class="navbar-brand d-flex align-items-center">
+          <strong style="color: #fff;">Редактирование тезисов</strong>
+        </a>
+        <a href="index.html" class="btn btn-bd-primary">На главную</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="container py-5">
+      <div class="card mx-auto px-2 py-4" style="max-width: 680px;">
+        <form id="thesis-form">
+          <div class="mb-4">
+            <label for="thesis-count" class="form-label">Количество тезисов <span style="color:#8ebeff;">(1–8)</span>:</label>
+            <input type="number" id="thesis-count" class="form-control" min="1" max="8" value="1">
+          </div>
+          <div id="thesis-container" class="mb-4">
+            <!-- Динамически генерируемые поля -->
+          </div>
+          <div class="mb-4">
+            <label for="upload-image" class="form-label">Загрузите фото:</label>
+            <input type="file" id="upload-image" class="form-control" accept="image/*">
+            <img id="image-preview" class="preview-image d-none" alt="Предпросмотр изображения">
+          </div>
+          <div class="mb-4">
+            <label for="upload-audio" class="form-label">Загрузите аудио:</label>
+            <input type="file" id="upload-audio" class="form-control" accept="audio/*">
+            <audio id="audio-preview" class="mt-2 w-100 d-none" controls></audio>
+          </div>
+          <button type="button" class="btn btn-bd-primary w-100 mt-2" id="save-thesis">Сохранить и рендерить</button>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <footer class="text-body-secondary py-4" style="margin-bottom: 0;">
+    <div class="container text-center">
+      <small>© lsrsp 2025 | Инфографика автоматизации</small>
+    </div>
+  </footer>
+
+  <script src="assets/thesis_edit.js"></script>
+</body>
+</html>

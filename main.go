@@ -582,6 +582,82 @@ func renderHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(history)
 }
 
+func updateRenderHistoryStatus(uid, newStatus, outputPath string) error {
+	db, err := sql.Open("sqlite3", "./templates.db")
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	if outputPath != "" {
+		// Если нужен output_path — кладём его внутрь params как JSON-поле
+		_, err = db.Exec(`
+			UPDATE render_history 
+			SET status = ?, params = json_set(COALESCE(params, '{}'), '$.output_path', ?) 
+			WHERE uid = ?`, newStatus, outputPath, uid)
+	} else {
+		_, err = db.Exec("UPDATE render_history SET status = ? WHERE uid = ?", newStatus, uid)
+	}
+	return err
+}
+
+func startStatusUpdater() {
+	go func() {
+		for {
+			time.Sleep(10 * time.Second) // Опрос раз в 10 секунд, можно чаще/реже
+
+			db, err := sql.Open("sqlite3", "./templates.db")
+			if err != nil {
+				log.Println("StatusUpdater: DB error:", err)
+				continue
+			}
+
+			// Ищем только неготовые задачи
+			rows, err := db.Query("SELECT uid, status FROM render_history WHERE status IN ('queued', 'rendering')")
+			if err != nil {
+				db.Close()
+				continue
+			}
+
+			var uids []string
+			for rows.Next() {
+				var uid, status string
+				if err := rows.Scan(&uid, &status); err == nil {
+					uids = append(uids, uid)
+				}
+			}
+			rows.Close()
+			db.Close()
+
+			for _, uid := range uids {
+				statusObj, err := getNexrenderJobStatus(uid)
+				if err != nil {
+					log.Println("StatusUpdater: nexrender error:", err)
+					continue
+				}
+				// Пример структуры ответа Nexrender (проверь у себя, если надо!)
+				status, _ := statusObj["state"].(string)
+				var outputPath string
+				if out, ok := statusObj["output"].(string); ok {
+					outputPath = out
+				}
+				// Маппим Nexrender-статусы на свои
+				myStatus := "queued"
+				switch status {
+				case "queued":
+					myStatus = "queued"
+				case "running":
+					myStatus = "rendering"
+				case "finished":
+					myStatus = "done"
+				case "errored", "failed", "canceled":
+					myStatus = "error"
+				}
+				updateRenderHistoryStatus(uid, myStatus, outputPath)
+			}
+		}
+	}()
+}
+
 func main() {
 	_ = mime.AddExtensionType(".js", "application/javascript")
 
@@ -601,6 +677,10 @@ func main() {
 	http.HandleFunc("/api/render-status", renderStatusHandler)
 
 	http.HandleFunc("/api/render-history", renderHistoryHandler)
+
+	startStatusUpdater()
+
+	http.Handle("/output/", http.StripPrefix("/output/", http.FileServer(http.Dir("C:/Users/Yarik/Downloads/DIPLOMA/output"))))
 
 	port := ":8080"
 	fmt.Println("Сервер запущен на http://192.168.0.128" + port)

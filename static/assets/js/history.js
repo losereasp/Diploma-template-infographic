@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', function () {
     .then(r => r.json())
     .then(history => {
       if (!history.length) {
-        tableBody.innerHTML = '<tr><td colspan="6" class="text-center">История пуста</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="8" class="text-center">История пуста</td></tr>';
         return;
       }
 
@@ -20,6 +20,20 @@ document.addEventListener('DOMContentLoaded', function () {
           }).join('; ');
         }
         let uidBtnId = 'copybtn-' + h.uid;
+
+        // --- Логика для кнопки "Скачать результат" ---
+        let downloadBtn = '';
+        if (h.status === 'done' && h.params && h.params.output_path) {
+          let relPath = h.params.output_path;
+          // Убрать абсолютный путь и сделать URL
+          if (relPath.startsWith('C:') || relPath.startsWith('D:')) {
+            // Windows path: вырезаем только имя файла
+            relPath = '/output/' + relPath.split(/[/\\]/).pop();
+          } else if (!relPath.startsWith('/output/')) {
+            relPath = '/output/' + relPath.replace(/^.*[\\\/]/, '');
+          }
+          downloadBtn = `<a href="${relPath}" class="btn btn-sm btn-outline-info" target="_blank" download>Скачать</a>`;
+        }
 
         rowsHTML += `
           <tr>
@@ -44,6 +58,7 @@ document.addEventListener('DOMContentLoaded', function () {
             </td>
             <td>${h.status || '-'}</td>
             <td>${h.username}</td>
+            <td>${downloadBtn}</td> <!-- новая ячейка -->
           </tr>
         `;
       });
@@ -55,8 +70,6 @@ document.addEventListener('DOMContentLoaded', function () {
         btn.onclick = function () {
           const uid = btn.getAttribute('data-uid');
           const tooltip = btn.parentNode.querySelector('.copied-tooltip');
-          
-          // Fallback через execCommand
           const textarea = document.createElement('textarea');
           textarea.value = uid;
           textarea.style.position = 'fixed';

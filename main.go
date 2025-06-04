@@ -637,7 +637,7 @@ func updateRenderHistoryStatus(uid, newStatus, outputPath string) error {
 func startStatusUpdater() {
 	go func() {
 		for {
-			time.Sleep(10 * time.Second)
+			time.Sleep(2 * time.Second) // Теперь чаще опрашиваем
 
 			db, err := sql.Open("sqlite3", "./templates.db")
 			if err != nil {
@@ -666,6 +666,15 @@ func startStatusUpdater() {
 				var myStatus string
 				var outputPath string
 				var progress float64
+
+				// Получаем старый прогресс из БД
+				dbp, _ := sql.Open("sqlite3", "./templates.db")
+				var paramsStr string
+				_ = dbp.QueryRow("SELECT params FROM render_history WHERE uid = ?", uid).Scan(&paramsStr)
+				var params map[string]interface{}
+				_ = json.Unmarshal([]byte(paramsStr), &params)
+				oldProgress, _ := params["progress"].(float64)
+				dbp.Close()
 
 				if err != nil || statusObj == nil {
 					// Проверяем, сколько времени прошло с момента создания задачи
@@ -732,18 +741,19 @@ func startStatusUpdater() {
 					}
 				}
 
-				// Сохраняем прогресс в params (JSON)
-				dbp, _ := sql.Open("sqlite3", "./templates.db")
-				var paramsStr string
-				_ = dbp.QueryRow("SELECT params FROM render_history WHERE uid = ?", uid).Scan(&paramsStr)
-				var params map[string]interface{}
-				_ = json.Unmarshal([]byte(paramsStr), &params)
+				// Не затираем прогресс на 0, если раньше был больше 0
+				if progress == 0 && oldProgress > 0 {
+					progress = oldProgress
+				}
+
+				// Обновляем params
 				params["progress"] = progress
 				paramsJSON, _ := json.Marshal(params)
-				_, _ = dbp.Exec(`UPDATE render_history SET params = ? WHERE uid = ?`, string(paramsJSON), uid)
-				dbp.Close()
 
-				updateRenderHistoryStatus(uid, myStatus, outputPath)
+				// Сохраняем статус и прогресс
+				dbp2, _ := sql.Open("sqlite3", "./templates.db")
+				_, _ = dbp2.Exec(`UPDATE render_history SET status = ?, params = ? WHERE uid = ?`, myStatus, string(paramsJSON), uid)
+				dbp2.Close()
 			}
 		}
 	}()

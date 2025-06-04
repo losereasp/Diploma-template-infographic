@@ -663,6 +663,7 @@ func startStatusUpdater() {
 
 			for _, uid := range uids {
 				statusObj, err := getNexrenderJobStatus(uid)
+				log.Printf("[DEBUG] Ответ от Nexrender для %s: %+v, err: %v", uid, statusObj, err)
 				var myStatus string
 				var outputPath string
 				var progress float64
@@ -717,27 +718,64 @@ func startStatusUpdater() {
 					}
 				} else {
 					status, _ := statusObj["state"].(string)
-					if out, ok := statusObj["output"].(string); ok {
-						outputPath = out
+					// --- Вот тут меняем: всегда используем renderProgress!
+					// 1. Вытаскиваем renderProgress
+					// Универсальное вытаскивание renderProgress независимо от типа
+					progress = 0
+					if prRaw, ok := statusObj["renderProgress"]; ok {
+						switch v := prRaw.(type) {
+						case float64:
+							if v > 1.01 {
+								progress = v / 100.0
+							} else {
+								progress = v
+							}
+						case int:
+							if v > 1 {
+								progress = float64(v) / 100.0
+							} else {
+								progress = float64(v)
+							}
+						case json.Number:
+							prFloat, err := v.Float64()
+							if err == nil {
+								if prFloat > 1.01 {
+									progress = prFloat / 100.0
+								} else {
+									progress = prFloat
+								}
+							}
+						default:
+							// Ну мало ли...
+							progress = 0
+						}
 					}
-					if pr, ok := statusObj["progress"].(float64); ok {
-						progress = pr
-					} else if prInt, ok := statusObj["progress"].(int); ok {
-						progress = float64(prInt)
-					}
-					switch status {
-					case "queued":
-						myStatus = "queued"
-					case "running":
-						myStatus = "rendering"
-					case "finished":
+
+					// 2. Логика только по progress!
+					if progress >= 1.0 {
 						myStatus = "done"
 						progress = 1.0
-					case "errored", "failed", "canceled":
-						myStatus = "error"
-						progress = 0.0
-					default:
-						myStatus = "unknown"
+					} else if progress > 0.0 {
+						myStatus = "rendering"
+					} else {
+						// Прямо тут учитываем странный unknown от Nexrender
+						switch {
+						case status == "queued" || status == "created":
+							myStatus = "queued"
+						case status == "finished":
+							myStatus = "done"
+						case status == "errored" || status == "failed" || status == "canceled":
+							myStatus = "error"
+						case status == "picked" || status == "started" || len(status) > 7 && status[:7] == "render:":
+							myStatus = "rendering"
+						default:
+							myStatus = "unknown"
+						}
+
+					}
+
+					if out, ok := statusObj["output"].(string); ok && out != "" {
+						outputPath = out
 					}
 				}
 
@@ -754,6 +792,9 @@ func startStatusUpdater() {
 				dbp2, _ := sql.Open("sqlite3", "./templates.db")
 				_, _ = dbp2.Exec(`UPDATE render_history SET status = ?, params = ? WHERE uid = ?`, myStatus, string(paramsJSON), uid)
 				dbp2.Close()
+
+				log.Printf("[PROGRESS] %s | status: %s | progress: %.2f", uid, myStatus, progress)
+				updateRenderHistoryStatus(uid, myStatus, outputPath)
 			}
 		}
 	}()

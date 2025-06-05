@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -263,7 +264,17 @@ func saveTaskHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	taskType := r.FormValue("type")
-	template := r.FormValue("template")
+	templateID := r.FormValue("template") // <- Ожидается ЧИСЛО (id шаблона)
+
+	// --- Если вдруг приходит не id, а имя шаблона ---
+	if _, err := strconv.Atoi(templateID); err != nil {
+		db, _ := sql.Open("sqlite3", "./templates.db")
+		defer db.Close()
+		var id int
+		_ = db.QueryRow("SELECT id FROM templates WHERE name = ?", templateID).Scan(&id)
+		templateID = fmt.Sprintf("%d", id)
+	}
+
 	paramsRaw := r.FormValue("params")
 	var params map[string]interface{}
 	if err := json.Unmarshal([]byte(paramsRaw), &params); err != nil {
@@ -295,13 +306,13 @@ func saveTaskHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// --- Формируем уникальный outputPath (теперь просто через timestamp или params, без uid) ---
+	// --- Формируем уникальный outputPath ---
 	base := "C:/Users/Yarik/Downloads/DIPLOMA"
-	outputPath := filepath.Join(base, "output", fmt.Sprintf("%s_%d.mp4", template, time.Now().UnixNano()))
+	outputPath := filepath.Join(base, "output", fmt.Sprintf("%s_%d.mp4", templateID, time.Now().UnixNano()))
 	params["output_path"] = outputPath
 
 	// --- Собираем Nexrender job ---
-	job, err := buildJob(taskType, template, outputPath, params, username)
+	job, err := buildJob(taskType, templateID, outputPath, params, username)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -317,7 +328,8 @@ func saveTaskHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	saveRenderHistory(username, nexrenderUid, taskType, params, "queued")
+	// --- Сохраняем историю с правильным template_id ---
+	saveRenderHistory(username, nexrenderUid, taskType, templateID, params, "queued")
 	log.Println("Задача отправлена в nexrender-server, UID:", nexrenderUid)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "render_started", "uid": nexrenderUid})
@@ -411,7 +423,7 @@ func buildJob(taskType, template, outputPath string, params map[string]interface
 	return job, nil
 }
 
-func saveRenderHistory(username, uid, taskType string, params map[string]interface{}, status string) {
+func saveRenderHistory(username, uid, taskType, templateID string, params map[string]interface{}, status string) {
 	db, err := sql.Open("sqlite3", "./templates.db")
 	if err != nil {
 		log.Println("DB error:", err)
@@ -419,8 +431,8 @@ func saveRenderHistory(username, uid, taskType string, params map[string]interfa
 	}
 	defer db.Close()
 	paramsJSON, _ := json.Marshal(params)
-	_, err = db.Exec("INSERT INTO render_history (username, uid, type, params, status) VALUES (?, ?, ?, ?, ?)",
-		username, uid, taskType, string(paramsJSON), status)
+	_, err = db.Exec("INSERT INTO render_history (username, uid, type, template_id, params, status) VALUES (?, ?, ?, ?, ?, ?)",
+		username, uid, taskType, templateID, string(paramsJSON), status)
 	if err != nil {
 		log.Println("Ошибка записи истории рендера:", err)
 	}
@@ -550,6 +562,7 @@ func renderStatusHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // Получение истории рендеров для текущего пользователя (или всей истории для админа)
+// Получение истории рендеров для текущего пользователя (или всей истории для админа)
 func renderHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("user_session")
 	if err != nil {
@@ -579,12 +592,20 @@ func renderHistoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Если админ — показываем всю историю, иначе только свою
 	var rows *sql.Rows
 	if role == "admin" {
-		rows, err = db.Query("SELECT id, username, uid, type, params, submitted_at, status FROM render_history ORDER BY id DESC LIMIT 100")
+		rows, err = db.Query(`
+			SELECT rh.id, t.name, rh.username, rh.uid, rh.type, rh.params, rh.submitted_at, rh.status
+			FROM render_history rh
+			LEFT JOIN templates t ON rh.template_id = t.id
+			ORDER BY rh.id DESC LIMIT 100`)
 	} else {
-		rows, err = db.Query("SELECT id, username, uid, type, params, submitted_at, status FROM render_history WHERE username = ? ORDER BY id DESC LIMIT 100", username)
+		rows, err = db.Query(`
+			SELECT rh.id, t.name, rh.username, rh.uid, rh.type, rh.params, rh.submitted_at, rh.status
+			FROM render_history rh
+			LEFT JOIN templates t ON rh.template_id = t.id
+			WHERE rh.username = ?
+			ORDER BY rh.id DESC LIMIT 100`, username)
 	}
 	if err != nil {
 		writeJsonError(w, "DB error", http.StatusInternalServerError)
@@ -595,20 +616,26 @@ func renderHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	var history []map[string]interface{}
 	for rows.Next() {
 		var id int
-		var user, uid, t, params, submittedAt, status string
-		if err := rows.Scan(&id, &user, &uid, &t, &params, &submittedAt, &status); err != nil {
+		var templateName, user, uid, t, params, submittedAt, status string
+		if err := rows.Scan(&id, &templateName, &user, &uid, &t, &params, &submittedAt, &status); err != nil {
 			continue
 		}
 		var paramsObj map[string]interface{}
-		json.Unmarshal([]byte(params), &paramsObj)
+		_ = json.Unmarshal([]byte(params), &paramsObj)
+		progress := 0.0
+		if p, ok := paramsObj["progress"].(float64); ok {
+			progress = p
+		}
 		history = append(history, map[string]interface{}{
-			"id":           id,
-			"username":     user,
-			"uid":          uid,
-			"type":         t,
-			"params":       paramsObj,
-			"submitted_at": submittedAt,
-			"status":       status,
+			"id":            id,
+			"template_name": templateName,
+			"username":      user,
+			"uid":           uid,
+			"type":          t,
+			"params":        paramsObj,
+			"submitted_at":  submittedAt,
+			"status":        status,
+			"progress":      progress,
 		})
 	}
 
@@ -674,7 +701,6 @@ func startStatusUpdater() {
 				_ = dbp.QueryRow("SELECT params FROM render_history WHERE uid = ?", uid).Scan(&paramsStr)
 				var params map[string]interface{}
 				_ = json.Unmarshal([]byte(paramsStr), &params)
-				oldProgress, _ := params["progress"].(float64)
 				dbp.Close()
 
 				if err != nil || statusObj == nil {
@@ -778,12 +804,6 @@ func startStatusUpdater() {
 						outputPath = out
 					}
 				}
-
-				// Не затираем прогресс на 0, если раньше был больше 0
-				if progress == 0 && oldProgress > 0 {
-					progress = oldProgress
-				}
-
 				// Обновляем params
 				params["progress"] = progress
 				paramsJSON, _ := json.Marshal(params)
@@ -798,6 +818,119 @@ func startStatusUpdater() {
 			}
 		}
 	}()
+}
+
+// Только для админа!
+func adminStatsHandler(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("user_session")
+	if err != nil {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+	sessionsMutex.Lock()
+	username, ok := sessions[cookie.Value]
+	sessionsMutex.Unlock()
+	if !ok {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+
+	db, err := sql.Open("sqlite3", "./templates.db")
+	if err != nil {
+		writeJsonError(w, "DB error", 500)
+		return
+	}
+	defer db.Close()
+
+	var role string
+	err = db.QueryRow("SELECT role FROM users WHERE username = ?", username).Scan(&role)
+	if err != nil || role != "admin" {
+		writeJsonError(w, "Forbidden", 403)
+		return
+	}
+
+	var totalTemplates, totalRenders int
+	db.QueryRow("SELECT COUNT(*) FROM templates").Scan(&totalTemplates)
+	db.QueryRow("SELECT COUNT(*) FROM render_history").Scan(&totalRenders)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]int{
+		"total_templates": totalTemplates,
+		"total_renders":   totalRenders,
+	})
+}
+
+func adminRendersHandler(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("user_session")
+	if err != nil {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+	sessionsMutex.Lock()
+	username, ok := sessions[cookie.Value]
+	sessionsMutex.Unlock()
+	if !ok {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+
+	db, err := sql.Open("sqlite3", "./templates.db")
+	if err != nil {
+		writeJsonError(w, "DB error", 500)
+		return
+	}
+	defer db.Close()
+
+	var role string
+	err = db.QueryRow("SELECT role FROM users WHERE username = ?", username).Scan(&role)
+	if err != nil || role != "admin" {
+		writeJsonError(w, "Forbidden", 403)
+		return
+	}
+
+	rows, err := db.Query(`
+		SELECT rh.id, t.name, rh.username, rh.submitted_at, rh.status, rh.uid, rh.params
+		FROM render_history rh
+		LEFT JOIN templates t ON rh.template_id = t.id
+		ORDER BY rh.id DESC LIMIT 100`)
+	if err != nil {
+		writeJsonError(w, "DB error", 500)
+		return
+	}
+	defer rows.Close()
+
+	type R struct {
+		ID           int     `json:"id"`
+		TemplateName string  `json:"template_name"`
+		User         string  `json:"user"`
+		Date         string  `json:"date"`
+		Status       string  `json:"status"`
+		UID          string  `json:"uid"`
+		Progress     float64 `json:"progress"`
+		OutputPath   string  `json:"output_path"`
+	}
+
+	var history []R
+	for rows.Next() {
+		var r R
+		var paramsStr string
+		rows.Scan(&r.ID, &r.TemplateName, &r.User, &r.Date, &r.Status, &r.UID, &paramsStr)
+		// Достаем прогресс и output_path из params
+		var params map[string]interface{}
+		_ = json.Unmarshal([]byte(paramsStr), &params)
+		if v, ok := params["progress"].(float64); ok {
+			r.Progress = v
+		} else {
+			r.Progress = 0
+		}
+		if op, ok := params["output_path"].(string); ok {
+			r.OutputPath = op
+		}
+		history = append(history, r)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(history)
 }
 
 func main() {
@@ -819,6 +952,9 @@ func main() {
 	http.HandleFunc("/api/render-status", renderStatusHandler)
 
 	http.HandleFunc("/api/render-history", renderHistoryHandler)
+
+	http.HandleFunc("/api/admin/stats", adminStatsHandler)
+	http.HandleFunc("/api/admin/renders", adminRendersHandler)
 
 	startStatusUpdater()
 

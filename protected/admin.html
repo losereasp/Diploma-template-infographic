@@ -2,119 +2,112 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <title>Личный кабинет администратора</title>
-  <link href="/assets/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/dist/css/custom.css">
+  <title>Личный кабинет администратора | lsrsp</title>
+  <link href="/assets/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/css/custom.css">
   <style>
-    body {
-      background-color: #1a1a1a;
-      color: #f0f0f0;
-      font-family: 'Roboto', sans-serif;
+    html, body { height: 100%; }
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+    main { flex: 1 0 auto; }
+    footer { flex-shrink: 0; }
+    .text-body-secondary { color: #bbc1e1 !important; }
+    /* Tooltip для "Скопировано" */
+    .copied-tooltip {
+      display:none;
+      position:absolute;
+      left:50%;
+      top:32px;
+      transform:translateX(-50%);
+      background:#1ea97c;
+      color:#fff;
+      font-size:13px;
+      border-radius:8px;
+      padding:2px 14px;
+      z-index:10;
+      white-space:nowrap;
+      box-shadow:0 2px 8px #0002;
     }
-    .container {
-      padding-top: 3rem;
-    }
-    .card {
-      background-color: #262626;
-      border: none;
-    }
-    .table {
-      color: #f0f0f0;
-    }
-    .table thead {
-      background-color: #333;
-    }
-    .btn-primary {
-      background-color: #5a5aff;
-      border-color: #5a5aff;
-    }
-    /* Фиксированная кнопка возврата */
-    .back-to-main {
-      position: fixed;
-      right: 32px;
-      bottom: 32px;
-      z-index: 1000;
-      border-radius: 50px;
-      box-shadow: 0 2px 16px 2px rgba(0,0,0,0.20);
-      padding: 12px 28px;
-      font-size: 1.1rem;
-      font-weight: 500;
-      opacity: 0.95;
-      background: #232329;
-      color: #fff;
-      border: 2px solid #5a5aff;
-      transition: background 0.2s, color 0.2s;
-    }
-    .back-to-main:hover {
-      background: #5a5aff;
-      color: #fff;
-      text-decoration: none;
-      opacity: 1;
-    }
+    /* Чуть аккуратнее кнопки */
+    .btn.copy-uid-btn { padding: 2px 7px 2px 7px; }
+    .btn-success { background: #1ea97c !important; border: none !important; }
   </style>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      if (window.lucide) lucide.createIcons();
+    });
+  </script>
 </head>
 <body>
-  <a href="/index.html" class="back-to-main">&larr; На главную</a>
-  <div class="container">
-    <h2 class="mb-4">Личный кабинет администратора</h2>
-
-    <div class="card mb-4">
-      <div class="card-body">
-        <h5 class="card-title">Общая статистика</h5>
-        <p class="card-text">Всего шаблонов: <strong id="totalTemplates">0</strong></p>
-        <p class="card-text">Всего рендеров: <strong id="totalRenders">0</strong></p>
+  <!-- Header (тот же, что и на главной) -->
+  <header class="main-header">
+    <div class="main-header__container">
+      <div class="main-header__title">
+        <span>Личный кабинет администратора</span>
       </div>
-    </div>
-
-    <div class="card">
-      <div class="card-body">
-        <h5 class="card-title">История рендеров</h5>
-        <div class="table-responsive">
-          <table class="table table-dark table-bordered">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Шаблон</th>
-                <th>Пользователь</th>
-                <th>Дата</th>
-                <th>Статус</th>
-              </tr>
-            </thead>
-            <tbody id="renderHistory">
-              <tr><td colspan="5">Загрузка...</td></tr>
-            </tbody>
-          </table>
+      <div class="main-header__actions">
+        <a href="/index.html" class="main-header__btn">
+          <svg data-lucide="arrow-left" width="18" height="18"></svg>
+          На главную
+        </a>
+        <div class="main-header__userblock" id="userBlock" style="display:none;">
+          <span class="main-header__user" id="userStatus">
+            <svg data-lucide="user" width="15" height="15"></svg>
+            <span id="usernameText"></span>
+          </span>
+          <button class="main-header__btn main-header__btn--logout" id="logoutBtn" title="Выйти">
+            <svg data-lucide="log-out" width="16" height="16"></svg>
+          </button>
         </div>
       </div>
     </div>
-  </div>
+  </header>
 
+  <main>
+    <div class="container py-5">
+      <div class="card mb-4">
+        <div class="card-body">
+          <h5 class="card-title">Общая статистика</h5>
+          <p class="card-text">Всего шаблонов: <strong id="totalTemplates">0</strong></p>
+          <p class="card-text">Всего рендеров: <strong id="totalRenders">0</strong></p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">История рендеров</h5>
+          <div class="table-responsive">
+            <table class="table table-dark table-bordered">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Шаблон</th>
+                  <th>Пользователь</th>
+                  <th>Дата</th>
+                  <th>Статус</th>
+                  <th>Прогресс</th>
+                  <th>Действия</th>
+                </tr>
+              </thead>
+              <tbody id="renderHistory">
+                <tr><td colspan="7">Загрузка...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="text-body-secondary py-5" style="margin-bottom: 0;">
+    <div class="container">
+      <p class="mb-0 text-center">© lsrsp 2025 | Автоматизация инфографики</p>
+    </div>
+  </footer>
+
+  <script src="/assets/js/auth.js"></script>
   <script>
-    async function loadAdminDashboard() {
-      const statsRes = await fetch('/api/admin/stats');
-      const stats = await statsRes.json();
-      document.getElementById('totalTemplates').textContent = stats.total_templates;
-      document.getElementById('totalRenders').textContent = stats.total_renders;
-
-      const historyRes = await fetch('/api/admin/renders');
-      const renders = await historyRes.json();
-      const tbody = document.getElementById('renderHistory');
-      tbody.innerHTML = '';
-
-      renders.forEach((r, i) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${i + 1}</td>
-          <td>${r.template_name}</td>
-          <td>${r.user}</td>
-          <td>${r.date}</td>
-          <td>${r.status}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    loadAdminDashboard();
+    window.auth && window.auth.init && window.auth.init();
   </script>
+  <script src="/assets/js/admin_dashboard.js"></script>
 </body>
 </html>

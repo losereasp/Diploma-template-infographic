@@ -294,16 +294,35 @@ body {
   left: 0; top: 0;
   width: 100vw; height: 100vh;
   align-items: center; justify-content: center;
+  background: rgba(24, 28, 36, 0.92);
 }
 #loginModal .login-box,
-#thesisModal .modal-content,
-#cropModal > div,
-.search-modal-content {
+#thesisModal .modal-content {
   background: #232329;
   border-radius: 8px;
   padding: 32px 24px;
   width: 320px;
   margin: auto;
+}
+
+.search-modal-content {
+  background: #232329;
+  border-radius: 16px;
+  padding: 32px 32px 20px 32px;
+  min-width: 360px;
+  max-width: 480px;
+  margin: auto;
+  box-shadow: 0 8px 40px 0 rgba(0,0,0,0.25);
+}
+
+#cropModal > div {
+  background: #222;
+  border-radius: 18px;
+  padding: 32px 24px 40px 24px;
+  box-shadow: 0 6px 38px 0 rgba(0,0,0,0.35);
+  max-width: 90vw;
+  min-width: 340px;
+  width: auto;
 }
 
 #thesisModal .modal-content {

@@ -1,31 +1,51 @@
-// Загрузка общей статистики
+let prevTbodyHTML = "";
+let prevStats = { total_templates: null, total_renders: null };
+let lastAdminHistory = []; // Хранить последнюю загруженную историю
+
+// Загрузка общей статистики (обновляет только если изменилось)
 async function loadAdminStats() {
   try {
     const res = await fetch('/api/admin/stats');
     if (!res.ok) throw new Error("Не удалось получить статистику");
     const stats = await res.json();
-    document.getElementById('totalTemplates').textContent = stats.total_templates;
-    document.getElementById('totalRenders').textContent = stats.total_renders;
+
+    // Обновлять только если реально изменилось (чтобы не было "мерцания" цифр)
+    if (stats.total_templates !== prevStats.total_templates) {
+      document.getElementById('totalTemplates').textContent = stats.total_templates;
+      prevStats.total_templates = stats.total_templates;
+    }
+    if (stats.total_renders !== prevStats.total_renders) {
+      document.getElementById('totalRenders').textContent = stats.total_renders;
+      prevStats.total_renders = stats.total_renders;
+    }
   } catch (e) {
     document.getElementById('totalTemplates').textContent = '?';
     document.getElementById('totalRenders').textContent = '?';
+    prevStats = { total_templates: null, total_renders: null };
   }
 }
 
-// Загрузка истории рендеров (для админа)
-async function loadAdminRenders() {
+
+async function loadAdminRenders(filterUid = "") {
   const tbody = document.getElementById('renderHistory');
-  tbody.innerHTML = `<tr><td colspan="7">Загрузка...</td></tr>`;
   try {
     const res = await fetch('/api/admin/renders');
     if (!res.ok) throw new Error("Ошибка доступа");
     const history = await res.json();
-    if (!Array.isArray(history) || history.length === 0) {
+    lastAdminHistory = history; // Сохраняем всю историю
+
+    let filtered = history;
+    if (filterUid && filterUid.trim().length > 0) {
+      const q = filterUid.trim().toLowerCase();
+      filtered = history.filter(r => r.uid && r.uid.toLowerCase().includes(q));
+    }
+
+    if (!Array.isArray(filtered) || filtered.length === 0) {
       tbody.innerHTML = `<tr><td colspan="7">Рендеров нет</td></tr>`;
       return;
     }
 
-    tbody.innerHTML = history.map((r, i) => {
+    tbody.innerHTML = filtered.map((r, i) => {
       let percent = Math.round((r.progress || 0) * 100);
       if (percent > 100) percent = 100;
       if (percent < 0) percent = 0;
@@ -44,7 +64,7 @@ async function loadAdminRenders() {
         </a>`;
       }
 
-      // Кнопка скопировать UID (с тултипом, как в истории)
+      // Кнопка скопировать UID (с тултипом)
       let uidCopyBtn = `
         <div style="display:inline-block; position:relative;">
           <button type="button" class="btn btn-sm btn-secondary copy-uid-btn" data-uid="${r.uid}" title="Скопировать UID">
@@ -64,10 +84,20 @@ async function loadAdminRenders() {
             z-index:10;
             white-space:nowrap;
             box-shadow:0 2px 8px #0002;
-          ">
-            Скопировано
-          </span>
+          ">Скопировано</span>
         </div>
+      `;
+
+      let deleteBtn = `
+        <button class="btn btn-sm btn-danger delete-render-btn" data-uid="${r.uid}" title="Удалить">
+          <svg data-lucide="trash-2" width="16" height="16"></svg>
+        </button>
+      `;
+
+      let restartBtn = `
+        <button class="btn btn-sm btn-warning restart-render-btn" data-uid="${r.uid}" title="Перезапустить">
+          <svg data-lucide="refresh-ccw" width="16" height="16"></svg>
+        </button>
       `;
 
       return `
@@ -75,12 +105,14 @@ async function loadAdminRenders() {
           <td>${i + 1}</td>
           <td>${r.template_name || '—'}</td>
           <td>${r.user}</td>
-          <td>${r.date ? r.date.replace('T', ' ').slice(0, 16) : ''}</td>
+          <td>${timeAgo(r.date)}</td>
           <td>${formatStatus(r.status)}</td>
           <td>${percent}%</td>
           <td style="display:flex;gap:7px;align-items:center;">
             ${downloadBtn}
             ${uidCopyBtn}
+            ${restartBtn}
+            ${deleteBtn}
           </td>
         </tr>
       `;
@@ -89,7 +121,7 @@ async function loadAdminRenders() {
     // После рендера — активируем Lucide для svg-иконок:
     if (window.lucide) lucide.createIcons();
 
-    // Кнопка копирования UID с тултипом (полностью как в истории)
+    // Кнопка копирования UID
     tbody.querySelectorAll('.copy-uid-btn').forEach(btn => {
       btn.onclick = function (e) {
         e.preventDefault();
@@ -116,26 +148,95 @@ async function loadAdminRenders() {
       };
     });
 
+    // Кнопки удаления и перезапуска — без изменений
+    tbody.querySelectorAll('.delete-render-btn').forEach(btn => {
+      btn.onclick = async function () {
+        if (!confirm('Удалить рендер?')) return;
+        const uid = btn.getAttribute('data-uid');
+        const res = await fetch('/api/admin/renders/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uid })
+        });
+        if (res.ok) {
+          loadAdminRenders(document.getElementById('uidSearchInput').value);
+        } else {
+          alert('Ошибка удаления');
+        }
+      };
+    });
+
+    tbody.querySelectorAll('.restart-render-btn').forEach(btn => {
+      btn.onclick = async function () {
+        if (!confirm('Перезапустить рендер?')) return;
+        const uid = btn.getAttribute('data-uid');
+        const res = await fetch('/api/admin/renders/restart', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uid })
+        });
+        if (res.ok) {
+          loadAdminRenders(document.getElementById('uidSearchInput').value);
+        } else {
+          alert('Ошибка перезапуска');
+        }
+      };
+    });
+
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="7">Ошибка загрузки истории</td></tr>`;
   }
 }
 
-// Функция форматирования статуса (можно кастомизировать цвета)
+
+// Остальные функции оставь без изменений:
 function formatStatus(status) {
   switch (status) {
     case "done": return `<span class="badge badge-status badge-done">Готово</span>`;
     case "error": return `<span class="badge badge-status badge-error">Ошибка</span>`;
     case "queued": return `<span class="badge badge-status badge-queued">В очереди</span>`;
     case "rendering": return `<span class="badge badge-status badge-rendering">В процессе</span>`;
+    case "deleted": return `<span class="badge badge-status badge-deleted">deleted</span>`; // Добавить это!
+    case "restarted": return `<span class="badge badge-status badge-restarted">restarted</span>`;
     default: return `<span class="badge badge-status badge-unknown">${status}</span>`;
   }
 }
+
+function timeAgo(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  const now = new Date();
+  const diff = Math.floor((now - date) / 1000);
+  if (diff < 60) return "Только что";
+  if (diff < 3600) return Math.floor(diff/60) + " мин. назад";
+  if (diff < 86400) return Math.floor(diff/3600) + " ч. назад";
+  return date.toLocaleDateString("ru-RU") + " " + date.toLocaleTimeString("ru-RU").slice(0,5);
+}
+
+document.getElementById('uidSearchBtn').onclick = function() {
+  const val = document.getElementById('uidSearchInput').value;
+  loadAdminRenders(val);
+};
+
+document.getElementById('uidClearBtn').onclick = function() {
+  document.getElementById('uidSearchInput').value = "";
+  loadAdminRenders();
+};
+
+// Позволяет искать по Enter
+document.getElementById('uidSearchInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    loadAdminRenders(this.value);
+  }
+});
+
 
 // Запуск при загрузке страницы
 document.addEventListener('DOMContentLoaded', () => {
   loadAdminStats();
   loadAdminRenders();
+setInterval(() => {
+  loadAdminStats();
+  loadAdminRenders(document.getElementById('uidSearchInput').value);
+}, 5000);
 });
-
-// setInterval(loadAdminRenders, 10000); // обновлять каждые 10 сек

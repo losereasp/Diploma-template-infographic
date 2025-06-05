@@ -933,6 +933,153 @@ func adminRendersHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(history)
 }
 
+// Удаление рендера по UID (ТОЛЬКО для админа!)
+func adminDeleteRenderHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJsonError(w, "Method not allowed", 405)
+		return
+	}
+
+	cookie, err := r.Cookie("user_session")
+	if err != nil {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+	sessionsMutex.Lock()
+	username, ok := sessions[cookie.Value]
+	sessionsMutex.Unlock()
+	if !ok {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+
+	db, err := sql.Open("sqlite3", "./templates.db")
+	if err != nil {
+		writeJsonError(w, "DB error", 500)
+		return
+	}
+	defer db.Close()
+
+	var role string
+	err = db.QueryRow("SELECT role FROM users WHERE username = ?", username).Scan(&role)
+	if err != nil || role != "admin" {
+		writeJsonError(w, "Forbidden", 403)
+		return
+	}
+
+	var req struct {
+		UID string `json:"uid"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJsonError(w, "Bad request", 400)
+		return
+	}
+	if req.UID == "" {
+		writeJsonError(w, "uid required", 400)
+		return
+	}
+
+	// "Мягкое" удаление: меняем статус на "deleted"
+	_, err = db.Exec("UPDATE render_history SET status = 'deleted' WHERE uid = ?", req.UID)
+	if err != nil {
+		writeJsonError(w, "DB error", 500)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"result": "ok"})
+}
+
+func adminRestartRenderHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJsonError(w, "Method not allowed", 405)
+		return
+	}
+
+	cookie, err := r.Cookie("user_session")
+	if err != nil {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+	sessionsMutex.Lock()
+	username, ok := sessions[cookie.Value]
+	sessionsMutex.Unlock()
+	if !ok {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+
+	db, err := sql.Open("sqlite3", "./templates.db")
+	if err != nil {
+		writeJsonError(w, "DB error", 500)
+		return
+	}
+	defer db.Close()
+
+	var role string
+	err = db.QueryRow("SELECT role FROM users WHERE username = ?", username).Scan(&role)
+	if err != nil || role != "admin" {
+		writeJsonError(w, "Forbidden", 403)
+		return
+	}
+
+	var req struct {
+		UID string `json:"uid"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJsonError(w, "Bad request", 400)
+		return
+	}
+	if req.UID == "" {
+		writeJsonError(w, "uid required", 400)
+		return
+	}
+
+	// 1. Получаем старые параметры задачи
+	var templateID, taskType, paramsStr, origUsername string
+	err = db.QueryRow("SELECT template_id, type, params, username FROM render_history WHERE uid = ?", req.UID).
+		Scan(&templateID, &taskType, &paramsStr, &origUsername)
+	if err != nil {
+		writeJsonError(w, "Задача не найдена", 404)
+		return
+	}
+	var params map[string]interface{}
+	if err := json.Unmarshal([]byte(paramsStr), &params); err != nil {
+		writeJsonError(w, "Ошибка чтения параметров задачи", 500)
+		return
+	}
+
+	// 2. Генерируем новый outputPath
+	outputPath := fmt.Sprintf("C:/Users/Yarik/Downloads/DIPLOMA/output/%s_restart_%d.mp4", templateID, time.Now().UnixNano())
+	params["output_path"] = outputPath
+
+	// 3. Собираем новый Nexrender job
+	job, err := buildJob(taskType, templateID, outputPath, params, origUsername)
+	if err != nil {
+		writeJsonError(w, "Ошибка buildJob: "+err.Error(), 500)
+		return
+	}
+
+	// 4. Отправляем новый job в Nexrender
+	newUid, err := createNexrenderJob(job)
+	if err != nil {
+		writeJsonError(w, "Ошибка отправки задачи: "+err.Error(), 500)
+		return
+	}
+
+	// 5. Сохраняем новую запись в render_history
+	saveRenderHistory(origUsername, newUid, taskType, templateID, params, "queued")
+
+	// 6. Старую задачу помечаем как "restarted" (или можешь ничего не делать)
+	_, _ = db.Exec("UPDATE render_history SET status = 'restarted' WHERE uid = ?", req.UID)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"result":  "ok",
+		"new_uid": newUid,
+	})
+}
+
 func main() {
 	_ = mime.AddExtensionType(".js", "application/javascript")
 
@@ -956,11 +1103,15 @@ func main() {
 	http.HandleFunc("/api/admin/stats", adminStatsHandler)
 	http.HandleFunc("/api/admin/renders", adminRendersHandler)
 
+	http.HandleFunc("/api/admin/renders/delete", adminDeleteRenderHandler)
+
+	http.HandleFunc("/api/admin/renders/restart", adminRestartRenderHandler)
+
 	startStatusUpdater()
 
 	http.Handle("/output/", http.StripPrefix("/output/", http.FileServer(http.Dir("C:/Users/Yarik/Downloads/DIPLOMA/output"))))
 
 	port := ":8080"
 	fmt.Println("Сервер запущен на http://192.168.0.128" + port)
-	log.Fatal(http.ListenAndServe(port, nil))
+	//log.Fatal(http.ListenAndServe(port, nil))
 }

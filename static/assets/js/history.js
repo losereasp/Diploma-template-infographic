@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function renderHistoryList(history) {
+    history = history.filter(h => h.status !== 'deleted');
     if (!history.length) {
       historyList.innerHTML = '<div style="text-align:center;padding:36px;">История пуста</div>';
       return;

@@ -378,3 +378,65 @@ body {
   min-width: 320px;
   max-width: 98vw;
 }
+.badge-deleted {
+  background: #676779;
+  color: #fff;
+  font-weight: 600;
+  border-radius: 0.5em;
+  padding: 0.25em 0.8em;
+  font-size: 1em;
+  display: inline-block;
+}
+.badge-restarted {
+  background: #676779;
+  color: #fff;
+}
+
+.input-search::placeholder {
+  color: #bfc8ea !important;
+  opacity: 0.35;                  
+  font-weight: 500;
+  letter-spacing: 0.1px;
+}
+.input-search:focus {
+  border-color: #446dff;
+  background: #23243a;
+  color: #fff;
+}
+.input-search-icon svg {
+  display: block;
+}
+
+.btn-flat {
+  background: #323342;
+  color: #d3d7f4;
+  border: none;
+  border-radius: 7px;
+  font-weight: 500;
+  box-shadow: none;
+  outline: none;
+  padding: 0 22px;
+  font-size: 16px;
+  height: 38px;
+  transition: background 0.17s, color 0.15s;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-flat:hover, .btn-flat:focus {
+  background: #3c3d53;
+  color: #fff;
+}
+.btn-flat:active {
+  background: #23243a;
+  color: #adb3da;
+}
+.btn-flat.btn-secondary {
+  background: #2d2d33;
+  color: #b8bde8;
+}
+.btn-flat.btn-secondary:hover, .btn-flat.btn-secondary:focus {
+  background: #3c3d53;
+  color: #fff;
+}

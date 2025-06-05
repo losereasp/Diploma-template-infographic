@@ -7,6 +7,13 @@
   <link href="assets/css/bootstrap.min.css" rel="stylesheet">
   <!-- Твои кастомные стили -->
   <link rel="stylesheet" href="assets/css/custom.css">
+
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      if (window.lucide) lucide.createIcons();
+    });
+  </script>
   <style>
     body { background: #232329; color: #fff; }
     main.container { max-width: 1200px; }
@@ -16,29 +23,44 @@
   </style>
 </head>
 <body>
-  <header style="background-color: #2f496f;">
-    <div class="navbar navbar-dark shadow-sm">
-      <div class="container d-flex justify-content-between align-items-center">
-        <a href="index.html" class="navbar-brand d-flex align-items-center">
-          <strong style="color: #fff;">Элементы инфографики</strong>
-        </a>
-        <span id="userStatus" class="me-2"></span>
-        <a href="index.html" class="btn btn-outline-light btn-sm ms-2">На главную</a>
-      </div>
+<header class="main-header">
+  <div class="main-header__container" style="justify-content: space-between;">
+    <div class="main-header__title">
+      <span>Элементы инфографики</span>
     </div>
-  </header>
+    <div class="main-header__actions">
+      <a href="protected/admin.html" class="main-header__btn" id="adminPanelBtn" style="display:none;" title="Админ-панель">
+        <svg data-lucide="settings" width="17" height="17"></svg>
+        <span>Админка</span>
+      </a>
+      <div class="main-header__userblock" id="userBlock" style="display:none;">
+        <span class="main-header__user" id="userStatus">
+          <svg data-lucide="user" width="15" height="15"></svg>
+          <span id="usernameText">admin (admin)</span>
+        </span>
+        <button class="main-header__btn main-header__btn--logout" id="logoutBtn" title="Выйти">
+          <svg data-lucide="log-out" width="16" height="16"></svg>
+        </button>
+      </div>
+      <!-- УДАЛЁН loginBtn -->
+      <a href="index.html" class="main-header__btn">
+        <svg data-lucide="arrow-left" width="18" height="18" style="margin-right:8px;"></svg>
+        На главную
+      </a>
+    </div>
+  </div>
+</header>
 
-  <main class="container py-5">
-    <h2 class="mb-4">История рендеров</h2>
-    <!-- Список истории + шапка генерируются динамически! -->
-    <div id="renderHistoryList" class="history-list"></div>
-  </main>
+<main class="container py-5">
+  <h2 class="mb-4">История рендеров</h2>
+  <div id="renderHistoryList" class="history-list"></div>
+</main>
 
-  <!-- Скрипты -->
-  <script src="assets/js/auth.js"></script>
-  <script src="assets/js/history.js"></script>
-  <script>
-    window.auth && window.auth.init && window.auth.init();
-  </script>
+<!-- Скрипты -->
+<script src="assets/js/auth.js"></script>
+<script src="assets/js/history.js"></script>
+<script>
+  window.auth && window.auth.init && window.auth.init();
+</script>
 </body>
 </html>

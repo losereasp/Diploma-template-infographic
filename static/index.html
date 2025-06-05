@@ -22,21 +22,49 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@docsearch/css@3">
     <link href="assets/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/custom.css">
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    if (window.lucide) lucide.createIcons();
+  });
+</script>
+
   </head>
   <body>
-    <header style="background-color: #2f496f;" data-bs-theme="dark">
-      <div class="navbar navbar-dark shadow-sm" style="background-color: #2f496f;">
-        <div class="container d-flex justify-content-between align-items-center">
-          <a href="#" class="navbar-brand d-flex align-items-center">
-            <strong style="color: #fff;">Элементы инфографики</strong>
-          </a>
-          <span id="userStatus" class="me-2"></span>
-          <button id="loginBtn" class="btn btn-outline-light btn-sm ms-2">Войти</button>
-          <a href="history.html" id="renderHistoryBtn" class="btn btn-outline-light btn-sm ms-2">История рендеров</a>
-          <a href="protected/admin.html" class="btn btn-outline-light btn-sm ms-2" id="adminPanelBtn" style="display:none;">Админ-панель</a>
-        </div>
+<header class="main-header">
+  <div class="main-header__container">
+    <div class="main-header__title">
+      <span>Элементы инфографики</span>
+    </div>
+    <div class="main-header__actions">
+      <a href="history.html" id="renderHistoryBtn" class="main-header__btn" title="История рендеров">
+        <svg data-lucide="history" width="17" height="17"></svg>
+        <span>История</span>
+      </a>
+      <a href="protected/admin.html" class="main-header__btn" id="adminPanelBtn" style="display:none;" title="Админ-панель">
+        <svg data-lucide="settings" width="17" height="17"></svg>
+        <span>Админка</span>
+      </a>
+      <div class="main-header__userblock" id="userBlock" style="display:none;">
+        <span class="main-header__user" id="userStatus">
+          <svg data-lucide="user" width="15" height="15"></svg>
+          <span id="usernameText">admin (admin)</span>
+        </span>
+        <button class="main-header__btn main-header__btn--logout" id="logoutBtn" title="Выйти">
+          <svg data-lucide="log-out" width="16" height="16"></svg>
+        </button>
       </div>
-    </header>
+      <button id="loginBtn" class="main-header__btn main-header__btn--login">
+        <svg data-lucide="log-in" width="16" height="16"></svg>
+        <span>Войти</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+
+
     
     <!-- Модальное окно для входа -->
      <div id="loginModal">
@@ -75,7 +103,7 @@
 
 <footer class="text-body-secondary py-5" style="margin-bottom: 0;">
   <div class="container">
-    <p class="mb-0 text-center">© lsrsp 2025 | Инфографика автоматизации</p>
+    <p class="mb-0 text-center">© lsrsp 2025 | Автоматизация инфографики</p>
   </div>
 </footer>
 

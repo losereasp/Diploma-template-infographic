@@ -11,17 +11,21 @@ window.auth = {
   userStatus: null,
   adminPanelBtn: null,
   loginUsername: null,
+  userBlock: null,
+  logoutBtn: null,
 
   showLogin() {
-    this.loginModal.style.display = 'flex';
-    this.loginError.textContent = '';
-    this.loginUsername.value = '';
-    document.getElementById('loginPassword').value = '';
-    setTimeout(() => this.loginUsername.focus(), 50);
+    if (this.loginModal) {
+      this.loginModal.style.display = 'flex';
+      this.loginError.textContent = '';
+      this.loginUsername.value = '';
+      document.getElementById('loginPassword').value = '';
+      setTimeout(() => this.loginUsername.focus(), 50);
+    }
   },
 
   hideLogin() {
-    this.loginModal.style.display = 'none';
+    if (this.loginModal) this.loginModal.style.display = 'none';
   },
 
   async login(username, password) {
@@ -36,7 +40,7 @@ window.auth = {
       await this.updateUserStatus();
       const renderHistoryBtn = document.getElementById('renderHistoryBtn');
       if (renderHistoryBtn) renderHistoryBtn.style.display = this.isAuthorized ? '' : 'none';
-      this.isAuthorized = true; // и наоборот в блоке catch
+      this.isAuthorized = true;
       return true;
     } catch (e) {
       return false;
@@ -46,49 +50,79 @@ window.auth = {
   async logout() {
     await fetch('/api/logout', {method: 'POST'});
     await this.updateUserStatus();
+    // если сейчас на странице истории — редирект на главную
+    if (window.location.pathname.includes('history')) {
+      window.location.href = 'index.html';
+    }
   },
 
   async updateUserStatus() {
     try {
       const resp = await fetch('/api/whoami');
+      const renderHistoryBtn = document.getElementById('renderHistoryBtn');
       if (!resp.ok) {
-        this.loginBtn.style.display = '';
-        this.userStatus.textContent = '';
-        this.adminPanelBtn.style.display = 'none';
+        if (this.loginBtn) this.loginBtn.style.display = '';
+        renderHistoryBtn && (renderHistoryBtn.style.display = 'none');
+        this.adminPanelBtn && (this.adminPanelBtn.style.display = 'none');
+        // --- Скрыть userBlock ---
+        this.userBlock && (this.userBlock.style.display = 'none');
         this.isAuthorized = false;
         window.renderFilteredTemplates && window.renderFilteredTemplates();
+        // Если на защищённой странице — редирект
+        setTimeout(() => {
+          if (window.location.pathname.includes('history')) {
+            window.location.href = 'index.html';
+          }
+        }, 100);
         return;
       }
       const data = await resp.json();
-      this.loginBtn.style.display = 'none';
-      this.userStatus.innerHTML = `
-        <span style="color:#80ef9c;">${data.username} (${data.role})</span>
-        <button class="btn btn-outline-light btn-sm ms-2" id="logoutBtn">Выйти</button>
-      `;
-      if (data.role === "admin") {
-        this.adminPanelBtn.style.display = '';
-      } else {
-        this.adminPanelBtn.style.display = 'none';
+      if (this.loginBtn) this.loginBtn.style.display = 'none';
+      renderHistoryBtn && (renderHistoryBtn.style.display = '');
+
+      // --- Показать userBlock и вставить имя пользователя ---
+      if (this.userBlock && this.userStatus) {
+        this.userBlock.style.display = '';
+        this.userStatus.innerHTML = `
+          <svg data-lucide="user" width="15" height="15"></svg>
+          <span id="usernameText">${data.username} (${data.role})</span>
+        `;
+        if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
       }
+
+      // Кнопка выхода только если она есть
+      this.logoutBtn && (this.logoutBtn.onclick = async () => { await this.logout(); });
+
+      // Показывать админку только админу
+      this.adminPanelBtn && (this.adminPanelBtn.style.display = data.role === "admin" ? "" : "none");
       this.isAuthorized = true;
       window.renderFilteredTemplates && window.renderFilteredTemplates();
-
-      // Привязываем обработчик выхода после обновления DOM
-      document.getElementById('logoutBtn').onclick = async () => {
-        await this.logout();
-      };
     } catch (e) {
-      this.loginBtn.style.display = '';
-      this.userStatus.textContent = '';
-      this.adminPanelBtn.style.display = 'none';
+      if (this.loginBtn) this.loginBtn.style.display = '';
+      const renderHistoryBtn = document.getElementById('renderHistoryBtn');
+      renderHistoryBtn && (renderHistoryBtn.style.display = 'none');
+      this.adminPanelBtn && (this.adminPanelBtn.style.display = 'none');
+      this.userBlock && (this.userBlock.style.display = 'none');
       this.isAuthorized = false;
       window.renderFilteredTemplates && window.renderFilteredTemplates();
+      // Если на защищённой странице — редирект
+      setTimeout(() => {
+        if (window.location.pathname.includes('history')) {
+          window.location.href = 'index.html';
+        }
+      }, 100);
+    }
+  },
+
+  // Позволяет вызвать из любого скрипта быструю проверку
+  redirectIfNotAuthorized() {
+    if (!this.isAuthorized) {
+      window.location.href = 'index.html';
     }
   },
 
   // --- Инициализация слушателей и DOM ---
   init() {
-    // Находим элементы только сейчас!
     this.loginBtn = document.getElementById('loginBtn');
     this.loginModal = document.getElementById('loginModal');
     this.loginForm = document.getElementById('login-form');
@@ -98,48 +132,59 @@ window.auth = {
     this.userStatus = document.getElementById('userStatus');
     this.adminPanelBtn = document.getElementById('adminPanelBtn');
     this.loginUsername = document.getElementById('loginUsername');
+    this.userBlock = document.getElementById('userBlock');
+    this.logoutBtn = document.getElementById('logoutBtn');
 
-    if (!this.loginBtn) return; // Минимальная защита, если что-то не найдено
+    // Если на странице истории — убираем "Войти" и логин-модалку (на всякий случай)
+    if (window.location.pathname.includes('history')) {
+      if (this.loginBtn) this.loginBtn.style.display = 'none';
+      if (this.loginModal) this.loginModal.style.display = 'none';
+    } else {
+      // Иначе работаем как обычно
+      if (this.loginBtn) this.loginBtn.onclick = () => this.showLogin();
+      if (this.closeLoginBtn) this.closeLoginBtn.onclick = () => this.hideLogin();
 
-    this.loginBtn.onclick = () => this.showLogin();
-    this.closeLoginBtn.onclick = () => this.hideLogin();
-
-    // Клик вне модалки — закрытие
-    this.loginModal.addEventListener('mousedown', (e) => {
-      if (e.target === this.loginModal) this.hideLogin();
-    });
-
-    // Кнопка "Войти" в модалке
-    this.doLoginBtn.onclick = () => this.loginForm.requestSubmit();
-
-    // Закрытие логин-модалки по ESC
-    document.addEventListener('keydown', (e) => {
-      if (this.loginModal.style.display === 'flex' && e.key === "Escape") {
-        this.hideLogin();
+      // Клик вне модалки — закрытие
+      if (this.loginModal) {
+        this.loginModal.addEventListener('mousedown', (e) => {
+          if (e.target === this.loginModal) this.hideLogin();
+        });
       }
-    });
 
-    // Сабмит формы логина
-    this.loginForm.onsubmit = async (e) => {
-      e.preventDefault();
-      const username = this.loginUsername.value.trim();
-      const password = document.getElementById('loginPassword').value.trim();
-      if (!username || !password) {
-        this.loginError.textContent = 'Заполните оба поля!';
-        return;
-      }
-      this.loginError.textContent = '';
-      const ok = await this.login(username, password);
-      if (!ok) {
-        this.loginError.textContent = 'Неверный логин или пароль';
-      }
-    };
+      // Кнопка "Войти" в модалке
+      if (this.doLoginBtn) this.doLoginBtn.onclick = () => this.loginForm.requestSubmit();
 
+      // Закрытие логин-модалки по ESC
+      document.addEventListener('keydown', (e) => {
+        if (this.loginModal && this.loginModal.style.display === 'flex' && e.key === "Escape") {
+          this.hideLogin();
+        }
+      });
+
+      // Сабмит формы логина
+      if (this.loginForm) {
+        this.loginForm.onsubmit = async (e) => {
+          e.preventDefault();
+          const username = this.loginUsername.value.trim();
+          const password = document.getElementById('loginPassword').value.trim();
+          if (!username || !password) {
+            this.loginError.textContent = 'Заполните оба поля!';
+            return;
+          }
+          this.loginError.textContent = '';
+          const ok = await this.login(username, password);
+          if (!ok) {
+            this.loginError.textContent = 'Неверный логин или пароль';
+          }
+        };
+      }
+    }
     // Проверить статус пользователя при инициализации
     this.updateUserStatus();
   }
 };
 
+// Парольный тогглер оставим универсальным
 document.addEventListener("DOMContentLoaded", function() {
   const passwordInput = document.getElementById('loginPassword');
   const togglePasswordBtn = document.getElementById('togglePassword');

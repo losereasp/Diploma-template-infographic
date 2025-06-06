@@ -777,28 +777,28 @@ func startStatusUpdater() {
 						}
 					}
 
-					// 2. Логика только по progress!
-					if progress >= 1.0 {
+					// 2. Определяем статус из state (statusObj["state"])
+					switch status {
+					case "finished":
 						myStatus = "done"
 						progress = 1.0
-					} else if progress > 0.0 {
+					case "queued", "created":
+						myStatus = "queued"
+					case "errored", "failed", "canceled":
+						myStatus = "error"
+					case "picked", "started":
 						myStatus = "rendering"
-					} else {
-						// Прямо тут учитываем странный unknown от Nexrender
-						switch {
-						case status == "queued" || status == "created":
-							myStatus = "queued"
-						case status == "finished":
-							myStatus = "done"
-						case status == "errored" || status == "failed" || status == "canceled":
-							myStatus = "error"
-						case status == "picked" || status == "started" || len(status) > 7 && status[:7] == "render:":
+					default:
+						// если статус начинается с "render:" — значит рендерится
+						if len(status) > 7 && status[:7] == "render:" {
 							myStatus = "rendering"
-						default:
+						} else {
 							myStatus = "unknown"
 						}
-
 					}
+
+					// 3. Прогресс: только от renderProgress, НЕ делай done, если он == 1!
+					// (оставь так же, как ты уже вытаскиваешь)
 
 					if out, ok := statusObj["output"].(string); ok && out != "" {
 						outputPath = out
@@ -1080,6 +1080,255 @@ func adminRestartRenderHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func adminCreateUserHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	cookie, err := r.Cookie("user_session")
+	if err != nil {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+	sessionsMutex.Lock()
+	username, ok := sessions[cookie.Value]
+	sessionsMutex.Unlock()
+	if !ok {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+
+	db, err := sql.Open("sqlite3", "./templates.db")
+	if err != nil {
+		writeJsonError(w, "DB error", 500)
+		return
+	}
+	defer db.Close()
+	var role string
+	err = db.QueryRow("SELECT role FROM users WHERE username = ?", username).Scan(&role)
+	if err != nil || role != "admin" {
+		writeJsonError(w, "Forbidden", 403)
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Role     string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJsonError(w, "Bad request", 400)
+		return
+	}
+	// Проверка что такой пользователь уже есть
+	var exists int
+	db.QueryRow("SELECT COUNT(*) FROM users WHERE username = ?", req.Username).Scan(&exists)
+	if exists > 0 {
+		writeJsonError(w, "User already exists", 409)
+		return
+	}
+	if req.Role != "admin" && req.Role != "user" {
+		req.Role = "user"
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		writeJsonError(w, "Hash error", 500)
+		return
+	}
+	_, err = db.Exec("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", req.Username, string(hash), req.Role)
+	if err != nil {
+		writeJsonError(w, "DB insert error", 500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{"status":"ok"}`))
+}
+
+// Получить список всех пользователей (ТОЛЬКО для админа)
+func adminUsersListHandler(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("user_session")
+	if err != nil {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+	sessionsMutex.Lock()
+	username, ok := sessions[cookie.Value]
+	sessionsMutex.Unlock()
+	if !ok {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+	db, err := sql.Open("sqlite3", "./templates.db")
+	if err != nil {
+		writeJsonError(w, "DB error", 500)
+		return
+	}
+	defer db.Close()
+	var role string
+	err = db.QueryRow("SELECT role FROM users WHERE username = ?", username).Scan(&role)
+	if err != nil || role != "admin" {
+		writeJsonError(w, "Forbidden", 403)
+		return
+	}
+	rows, err := db.Query("SELECT id, username, role, status FROM users ORDER BY id")
+	if err != nil {
+		writeJsonError(w, "DB error", 500)
+		return
+	}
+	defer rows.Close()
+
+	type U struct {
+		ID       int    `json:"id"`
+		Username string `json:"username"`
+		Role     string `json:"role"`
+		Status   string `json:"status"` // "active" / "blocked"
+	}
+	var users []U
+	for rows.Next() {
+		var u U
+		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.Status); err == nil {
+			users = append(users, u)
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(users)
+}
+
+// Удалить пользователя
+func adminDeleteUserHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJsonError(w, "Method not allowed", 405)
+		return
+	}
+	cookie, err := r.Cookie("user_session")
+	if err != nil {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+	sessionsMutex.Lock()
+	username, ok := sessions[cookie.Value]
+	sessionsMutex.Unlock()
+	if !ok {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+	db, err := sql.Open("sqlite3", "./templates.db")
+	if err != nil {
+		writeJsonError(w, "DB error", 500)
+		return
+	}
+	defer db.Close()
+	var role string
+	err = db.QueryRow("SELECT role FROM users WHERE username = ?", username).Scan(&role)
+	if err != nil || role != "admin" {
+		writeJsonError(w, "Forbidden", 403)
+		return
+	}
+	var req struct {
+		Username string `json:"username"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Username == "" {
+		writeJsonError(w, "Bad request", 400)
+		return
+	}
+	_, err = db.Exec("DELETE FROM users WHERE username = ?", req.Username)
+	if err != nil {
+		writeJsonError(w, "DB error", 500)
+		return
+	}
+	w.Write([]byte(`{"result":"ok"}`))
+}
+
+// Блокировка пользователя
+func adminBlockUserHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJsonError(w, "Method not allowed", 405)
+		return
+	}
+	cookie, err := r.Cookie("user_session")
+	if err != nil {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+	sessionsMutex.Lock()
+	username, ok := sessions[cookie.Value]
+	sessionsMutex.Unlock()
+	if !ok {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+	db, err := sql.Open("sqlite3", "./templates.db")
+	if err != nil {
+		writeJsonError(w, "DB error", 500)
+		return
+	}
+	defer db.Close()
+	var role string
+	err = db.QueryRow("SELECT role FROM users WHERE username = ?", username).Scan(&role)
+	if err != nil || role != "admin" {
+		writeJsonError(w, "Forbidden", 403)
+		return
+	}
+	var req struct {
+		Username string `json:"username"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Username == "" {
+		writeJsonError(w, "Bad request", 400)
+		return
+	}
+	_, err = db.Exec("UPDATE users SET status = 'blocked' WHERE username = ?", req.Username)
+	if err != nil {
+		writeJsonError(w, "DB error", 500)
+		return
+	}
+	w.Write([]byte(`{"result":"ok"}`))
+}
+
+// Разблокировка пользователя
+func adminUnblockUserHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJsonError(w, "Method not allowed", 405)
+		return
+	}
+	cookie, err := r.Cookie("user_session")
+	if err != nil {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+	sessionsMutex.Lock()
+	username, ok := sessions[cookie.Value]
+	sessionsMutex.Unlock()
+	if !ok {
+		writeJsonError(w, "Unauthorized", 401)
+		return
+	}
+	db, err := sql.Open("sqlite3", "./templates.db")
+	if err != nil {
+		writeJsonError(w, "DB error", 500)
+		return
+	}
+	defer db.Close()
+	var role string
+	err = db.QueryRow("SELECT role FROM users WHERE username = ?", username).Scan(&role)
+	if err != nil || role != "admin" {
+		writeJsonError(w, "Forbidden", 403)
+		return
+	}
+	var req struct {
+		Username string `json:"username"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Username == "" {
+		writeJsonError(w, "Bad request", 400)
+		return
+	}
+	_, err = db.Exec("UPDATE users SET status = 'active' WHERE username = ?", req.Username)
+	if err != nil {
+		writeJsonError(w, "DB error", 500)
+		return
+	}
+	w.Write([]byte(`{"result":"ok"}`))
+}
+
 func main() {
 	_ = mime.AddExtensionType(".js", "application/javascript")
 
@@ -1107,11 +1356,19 @@ func main() {
 
 	http.HandleFunc("/api/admin/renders/restart", adminRestartRenderHandler)
 
+	http.HandleFunc("/api/admin/users/create", adminCreateUserHandler)
+
+	http.HandleFunc("/api/admin/users", adminUsersListHandler)
+	http.HandleFunc("/api/admin/users/delete", adminDeleteUserHandler)
+	http.HandleFunc("/api/admin/users/block", adminBlockUserHandler)
+	http.HandleFunc("/api/admin/users/unblock", adminUnblockUserHandler)
+
 	startStatusUpdater()
 
 	http.Handle("/output/", http.StripPrefix("/output/", http.FileServer(http.Dir("C:/Users/Yarik/Downloads/DIPLOMA/output"))))
 
 	port := ":8080"
 	fmt.Println("Сервер запущен на http://192.168.0.128" + port)
-	//log.Fatal(http.ListenAndServe(port, nil))
+	log.Fatal(http.ListenAndServe(port, nil))
+	log.Println("main.go дошёл до конца, почему-то выходим…")
 }

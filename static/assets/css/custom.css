@@ -440,3 +440,10 @@ body {
   background: #3c3d53;
   color: #fff;
 }
+
+.form-control[style*="appearance:none"] {
+  background-image: url('data:image/svg+xml;utf8,<svg fill="none" stroke="%23aeb7da" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>');
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 18px 18px;
+}

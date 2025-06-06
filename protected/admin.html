@@ -11,7 +11,6 @@
     main { flex: 1 0 auto; }
     footer { flex-shrink: 0; }
     .text-body-secondary { color: #bbc1e1 !important; }
-    /* Tooltip для "Скопировано" */
     .copied-tooltip {
       display:none;
       position:absolute;
@@ -27,9 +26,131 @@
       white-space:nowrap;
       box-shadow:0 2px 8px #0002;
     }
-    /* Чуть аккуратнее кнопки */
     .btn.copy-uid-btn { padding: 2px 7px 2px 7px; }
     .btn-success { background: #1ea97c !important; border: none !important; }
+    .card { background: #22233c !important; border-radius: 16px; }
+    h6, .section-label { font-size: 16px; font-weight: 600; color: #bbc1e1; margin-bottom: 14px; }
+    .table-dark { background: #24253b; }
+    .badge-status { font-size: 13px; padding: 4px 11px; border-radius: 8px; font-weight: 500; }
+    .badge-done { background: #1ea97c; color: #fff; }
+    .badge-error { background: #ff4444; color: #fff; }
+    .badge-queued { background: #3636ad; color: #fff; }
+    .badge-rendering { background: #2988e8; color: #fff; }
+    .badge-deleted { background: #666; color: #fff; }
+    .badge-restarted { background: #eac53f; color: #222; }
+    .badge-unknown { background: #bbb; color: #222; }
+    .form-control, .custom-select, select {
+      background: #23243a;
+      border: 1.5px solid #353556;
+      color: #c4c8f0;
+      box-shadow: none;
+      transition: border .16s, box-shadow .16s;
+      min-width: 130px;
+      font-size: 15px;
+    }
+    .form-control:focus, .custom-select:focus, select:focus {
+      border-color: #5a6dfc;
+      box-shadow: 0 0 0 3px #3842c633;
+      background: #26283d;
+      color: #d3e0ff;
+      outline: none;
+    }
+    select.form-control, .select-icon-wrapper select.form-control {
+      appearance: none;
+      -webkit-appearance: none;
+      padding-right: 42px !important;
+      background-position: right 12px center;
+      background-repeat: no-repeat;
+      background-size: 19px 19px;
+      background-image: url('data:image/svg+xml;utf8,<svg fill="none" stroke="%23bbc1e1" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>');
+      cursor: pointer;
+      min-width: 160px;
+      max-width: 220px;
+      text-overflow: ellipsis;
+      overflow: hidden;
+    }
+    select.form-control:hover {
+      border-color: #6c8eff;
+      background-color: #232649;
+      cursor: pointer;
+    }
+    .select-icon-wrapper { position:relative; display:inline-block; }
+    .select-icon-wrapper .input-icon {
+      left: 13px; top: 53%; transform:translateY(-50%);
+      color: #aeb7da; position: absolute; pointer-events: none;
+    }
+    .select-icon-wrapper .dropdown-caret {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #8ba8d6;
+      pointer-events: none;
+      z-index: 2;
+      opacity: 0.96;
+      transition: color 0.17s;
+    }
+    .select-icon-wrapper select.form-control:focus ~ .dropdown-caret,
+    .select-icon-wrapper select.form-control:hover ~ .dropdown-caret {
+      color: #7a8bfc;
+    }
+    .select-icon-wrapper select.form-control {
+      padding-left: 38px !important;
+    }
+    .select-icon-wrapper option {
+      font-size: 15px;
+      white-space: nowrap;
+    }
+    .table-actions {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+    }
+    .table-actions .btn {
+      min-width: 38px;
+      padding: 0 10px;
+      font-size: 17px;
+    }
+    @media (max-width: 1200px) {
+      .select-icon-wrapper, .select-icon-wrapper select.form-control {
+        min-width: 115px;
+        font-size: 13px;
+      }
+      .btn, select.form-control {
+        font-size: 13px;
+      }
+    }
+    @media (max-width: 900px) {
+      .select-icon-wrapper, .select-icon-wrapper select.form-control {
+        min-width: 98px;
+        font-size: 12px;
+      }
+      .btn, select.form-control {
+        font-size: 12px;
+      }
+    }
+    .btn, .btn.btn-flat {
+      min-width: 102px;
+      padding-left: 14px;
+      padding-right: 14px;
+      white-space: nowrap;
+    }
+    .section-label { margin-bottom: 10px; font-size: 15.5px; }
+    #adminToast { position:fixed; bottom:32px; right:32px; z-index:9999; min-width:220px; background:#1ea97c; color:#fff; border-radius:8px; padding:13px 20px; box-shadow:0 6px 32px #0004; font-weight:600; font-size:16px; display:none;}
+    .input-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: #aeb7da; }
+    .input-search-wrapper { position:relative; width:260px; }
+    input:focus::placeholder, textarea:focus::placeholder {
+      color: #9bb7ec !important;
+      opacity: 0.95;
+    }
+    select:focus {
+      color: #c4c8f0;
+      background: #26283d;
+    }
+    .gap-3 { gap: 14px !important; }
   </style>
   <script src="https://unpkg.com/lucide@latest"></script>
   <script>
@@ -39,7 +160,7 @@
   </script>
 </head>
 <body>
-  <!-- Header (тот же, что и на главной) -->
+  <!-- Header -->
   <header class="main-header">
     <div class="main-header__container">
       <div class="main-header__title">
@@ -65,38 +186,145 @@
 
   <main>
     <div class="container py-5">
+
+      <!-- Общая статистика -->
       <div class="card mb-4">
         <div class="card-body">
-          <h5 class="card-title">Общая статистика</h5>
-          <p class="card-text">Всего шаблонов: <strong id="totalTemplates">0</strong></p>
+          <div class="section-label">Общая статистика</div>
+          <p class="card-text mb-1">Всего шаблонов: <strong id="totalTemplates">0</strong></p>
           <p class="card-text">Всего рендеров: <strong id="totalRenders">0</strong></p>
         </div>
       </div>
-<div class="search-panel" style="margin-bottom: 18px; display: flex; gap: 8px; align-items: center;">
-  <div class="input-search-wrapper" style="position:relative; width:260px;">
-    <input
-      id="uidSearchInput"
-      type="text"
-      class="form-control input-search"
-      placeholder="Поиск по UID…"
-      style="width:100%; background:#23243a; border:1.5px solid #353556; color:#c4c8f0; border-radius:8px; font-size:16px; height:38px; padding-left:38px;"
-      autocomplete="off"
-    >
-    <span class="input-search-icon" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);pointer-events:none;">
-      <svg width="19" height="19" viewBox="0 0 20 20" fill="none">
-        <circle cx="9" cy="9" r="7" stroke="#aeb7da" stroke-width="2"/>
-        <path d="M14.2 14.2L18 18" stroke="#aeb7da" stroke-width="2" stroke-linecap="round"/>
-      </svg>
-    </span>
-  </div>
-  <button id="uidSearchBtn" class="btn btn-flat">Найти</button>
-  <button id="uidClearBtn" class="btn btn-flat btn-secondary">Сбросить</button>
-</div>
 
+      <!-- Регистрация пользователя -->
+      <div class="card mb-3">
+        <div class="card-body">
+          <div class="section-label">Регистрация нового пользователя</div>
+          <div class="d-flex flex-wrap align-items-center gap-3" style="position: relative;">
+            <div style="position:relative;">
+              <input id="newUserName" class="form-control" style="width: 170px; padding-left: 38px;" placeholder="Логин">
+              <span class="input-icon">
+                <svg data-lucide="user" width="17" height="17"></svg>
+              </span>
+            </div>
+            <div style="position:relative;">
+              <input id="newUserPass" class="form-control" style="width: 150px; padding-left: 38px;" placeholder="Пароль" type="password">
+              <span class="input-icon">
+                <svg data-lucide="lock" width="17" height="17"></svg>
+              </span>
+            </div>
+            <div class="select-icon-wrapper" style="width:170px;">
+              <span class="input-icon">
+                <svg data-lucide="shield" width="17" height="17"></svg>
+              </span>
+              <select id="newUserRole" class="form-control">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+              <span class="dropdown-caret">
+                <svg data-lucide="chevron-down" width="18" height="18"></svg>
+              </span>
+            </div>
+            <button id="addUserBtn" class="btn btn-flat">Добавить</button>
+          </div>
+        </div>
+      </div>
 
+      <!-- Список пользователей -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <div class="section-label">Список пользователей</div>
+          <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+            <div style="position:relative;">
+              <input id="userSearchInput" class="form-control" style="width:200px;padding-left:38px;" placeholder="Поиск по логину…">
+              <span class="input-icon">
+                <svg data-lucide="search" width="17" height="17"></svg>
+              </span>
+            </div>
+            <div class="select-icon-wrapper" style="width:180px;">
+              <span class="input-icon">
+                <svg data-lucide="shield" width="16" height="16"></svg>
+              </span>
+              <select id="roleUserFilter" class="form-control">
+                <option value="">Все роли</option>
+                <option value="admin">Admin</option>
+                <option value="user">User</option>
+              </select>
+              <span class="dropdown-caret">
+                <svg data-lucide="chevron-down" width="18" height="18"></svg>
+              </span>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-dark table-bordered align-middle" style="min-width:400px;">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Логин</th>
+                  <th>Роль</th>
+                  <th>Статус</th>
+                  <th>Действия</th>
+                </tr>
+              </thead>
+              <tbody id="userListBody">
+                <tr>
+                  <td colspan="5">Загрузка...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- История рендеров -->
       <div class="card">
         <div class="card-body">
-          <h5 class="card-title">История рендеров</h5>
+          <div class="section-label">История рендеров</div>
+          <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+            <div class="input-search-wrapper" style="position:relative;">
+              <input
+                id="uidSearchInput"
+                type="text"
+                class="form-control input-search"
+                placeholder="Поиск по UID или шаблону…"
+                style="padding-left:38px; width: 240px;"
+                autocomplete="off"
+              >
+              <span class="input-icon">
+                <svg data-lucide="search" width="18" height="18"></svg>
+              </span>
+            </div>
+            <button id="uidSearchBtn" class="btn btn-flat">Найти</button>
+            <button id="uidClearBtn" class="btn btn-flat btn-secondary">Сбросить</button>
+            <div class="select-icon-wrapper" style="width:190px;">
+              <span class="input-icon">
+                <svg data-lucide="filter" width="17" height="17"></svg>
+              </span>
+              <select id="statusFilter" class="form-control">
+                <option value="">Все статусы</option>
+                <option value="done">Готово</option>
+                <option value="queued">В очереди</option>
+                <option value="rendering">В процессе</option>
+                <option value="error">Ошибка</option>
+                <option value="deleted">Удалён</option>
+                <option value="restarted">Перезапущен</option>
+              </select>
+              <span class="dropdown-caret">
+                <svg data-lucide="chevron-down" width="18" height="18"></svg>
+              </span>
+            </div>
+            <div class="select-icon-wrapper" style="width:210px;">
+              <span class="input-icon">
+                <svg data-lucide="users" width="17" height="17"></svg>
+              </span>
+              <select id="userFilter" class="form-control">
+                <option value="">Все пользователи</option>
+              </select>
+              <span class="dropdown-caret">
+                <svg data-lucide="chevron-down" width="18" height="18"></svg>
+              </span>
+            </div>
+          </div>
           <div class="table-responsive">
             <table class="table table-dark table-bordered">
               <thead>
@@ -111,7 +339,9 @@
                 </tr>
               </thead>
               <tbody id="renderHistory">
-                <tr><td colspan="7">Загрузка...</td></tr>
+                <tr>
+                  <td colspan="7">Загрузка...</td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -126,6 +356,7 @@
     </div>
   </footer>
 
+  <div id="adminToast"></div>
   <script src="/assets/js/auth.js"></script>
   <script>
     window.auth && window.auth.init && window.auth.init();
